@@ -392,10 +392,11 @@ function App(){
    payload.started_on=null;payload.finished_on=null
   }
   if(status==='reading'&&!book.started_on)payload.started_on=today
+  if(status==='reading'&&book.status==='finished'&&book.finished_on){payload.finished_on=null;setMessage('The previous finish date was cleared because the book is being read again.')}
   if(status==='finished'){
    if(!book.started_on)payload.started_on=today
    if(!book.finished_on)payload.finished_on=today
-  }else if(status!=='to_read'&&book.status==='finished'&&book.finished_on){
+  }else if(status!=='to_read'&&status!=='reading'&&book.status==='finished'&&book.finished_on){
    const confirmed=confirm('This book has a finish date. Keep the finish date when changing its status? Select Cancel to clear it.')
    if(!confirmed)payload.finished_on=null
   }
