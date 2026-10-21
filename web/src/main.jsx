@@ -76,6 +76,7 @@ function AroundWorldView({books,session,year,variant}){
   {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm city match"><h2>Confirm {pending.city}</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified that this book matches the city with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
  </section>
 }
+const archetypeCatalog={"A":["The Grump","Golden Retriever","Playboy","Morally Grey Hero","Protective Hero","Strong Heroine","Loyal Sidekick","Boy Next Door","Hopeless Romantic","Rival","Warrior","Healer","Trickster","Monster with a Heart","Single Parent","Chosen One","Mentor","Royal","Nerd/Bookworm","Introvert"],"B":["The Sunshine","Ice Queen","Bad Boy","The Witch","Cinnamon Roll","Broken Hero","The Loner","The Workaholic","Girl Next Door",null,"The Immortal"]}
 const tropeCatalog={"A":["Enemies to Lovers","Friends to Lovers","Fake Dating","Marriage of Convenience","Forced Proximity","Slow Burn","Only One Bed","Grumpy × Sunshine","Found Family","Second Chance","Forbidden Love","Royal Romance","Morally Grey Hero","Opposites Attract","Secret Identity","Hidden Powers","Academy Setting","Fated Mates","Arranged Marriage","Best Friend’s Brother"],"B":["Sports Romance","Brother’s Best Friend","Pen Pals","Single Parent","Workplace Romance","Small Town Romance","Holiday Romance","Roommates","Neighbors to Lovers","Childhood Friends to Lovers","Age Gap","Mistaken Identity","Love at First Sight","Friends with Benefits","Love Triangle","Amnesia","Revenge","He Falls First","She Falls First","Surprise Pregnancy"]}
 function PromptChallengeView({books,session,year,variant,challenge}){
  const [prompts,setPrompts]=useState([])
@@ -93,8 +94,9 @@ function PromptChallengeView({books,session,year,variant,challenge}){
   if(p.error||a.error)setError(p.error?.message||a.error?.message)
   else{
    let list=p.data||[]
-   if(challenge==='tropes'){
-    const missing=tropeCatalog[variant].flatMap((label,i)=>list.some(x=>x.position===i+1)?[]:[{user_id:session.user.id,challenge,variant,position:i+1,label}])
+   if(challenge==='tropes'||challenge==='archetypes'){
+    const catalog=challenge==='tropes'?tropeCatalog[variant]:archetypeCatalog[variant]
+    const missing=catalog.flatMap((label,i)=>!label||list.some(x=>x.position===i+1)?[]:[{user_id:session.user.id,challenge,variant,position:i+1,label}])
     if(missing.length){
      const inserted=await supabase.from('rc_custom_prompts').upsert(missing,{onConflict:'user_id,challenge,variant,position',ignoreDuplicates:true})
      if(inserted.error)setError(inserted.error.message)
@@ -128,16 +130,18 @@ function PromptChallengeView({books,session,year,variant,challenge}){
  return <section>
   <h2>{challenge==='tropes'?'Tropes':'Archetypes'} · Version {variant}</h2>
   <p>{assignments.length} filled · {prompts.length} defined prompts</p>
-  <p className="statsNote">{challenge==='tropes'?'The 20 official prompts are prefilled. A book can fill only one trope per year, with at most two books from the same series.':'Enter your exact Archetypes prompts in their original positions.'} Assign only verified matches (at least 70% confidence).</p>
+  {challenge==='archetypes'&&variant==='B'&&<p className="statsNote">Version B: slot 10 is intentionally undefined; slots 12–20 await your original prompts.</p>}
+  <p className="statsNote">{challenge==='tropes'?'The 20 official prompts are prefilled. A book can fill only one trope per year, with at most two books from the same series.':'Known Archetypes prompts are prefilled. Unconfirmed positions remain blank; add them only from your original list.'} Assign only verified matches (at least 70% confidence).</p>
   {error&&<p className="message" role="alert">{error}</p>}
   <div className="alphabetGrid">{Array.from({length:20},(_,i)=>i+1).map(position=>{
    const prompt=prompts.find(p=>p.position===position)
    const entry=prompt&&assignments.find(a=>a.prompt_id===prompt.id)
    const book=entry&&books.find(b=>b.id===entry.book_id)
    const value=drafts[position]??prompt?.label??''
+   const intentionallyEmpty=challenge==='archetypes'&&variant==='B'&&position===10
    return <article key={position} className={entry?'filled':''}><strong>{position}</strong>
     {entry?<><span>{prompt.label}</span><small>{book?.title||'Book unavailable'}</small><button className="subtle" disabled={busy} onClick={()=>remove(entry.id)}>Remove</button></>:<>
-     <input aria-label={'Prompt '+position} placeholder="Exact prompt…" value={value} readOnly={challenge==='tropes'} onChange={e=>setDrafts(d=>({...d,[position]:e.target.value}))}/>
+     <input aria-label={'Prompt '+position} placeholder={intentionallyEmpty?'Intentionally blank':'Exact prompt…'} disabled={intentionallyEmpty} value={value} readOnly={challenge==='tropes'} onChange={e=>setDrafts(d=>({...d,[position]:e.target.value}))}/>
      {challenge!=='tropes'&&value.trim()&&value.trim()!==prompt?.label&&<button className="subtle" disabled={busy} onClick={()=>savePrompt(position)}>Save prompt</button>}
      {prompt&&<select aria-label={'Assign book to '+prompt.label} value="" disabled={busy||!eligible.length} onChange={e=>{setPending({promptId:prompt.id,bookId:e.target.value});setVerified(false)}}><option value="">{eligible.length?'Choose book…':'No eligible books'}</option>{eligible.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
     </>}
