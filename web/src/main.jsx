@@ -11,10 +11,11 @@ const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','N
 function StatisticsView({books,onOpenJournal}){
  const [year,setYear]=useState(new Date().getFullYear())
  const finished=books.filter(b=>b.status==='finished')
+ const validDate=value=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return false;const [y,m,d]=value.split('-').map(Number);const parsed=new Date(Date.UTC(y,m-1,d));return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m-1&&parsed.getUTCDate()===d}
  const dated=finished.filter(b=>/^\d{4}-\d{2}-\d{2}$/.test(b.finished_on||'')&&(!b.started_on||b.finished_on>=b.started_on))
  const yearly=dated.filter(b=>Number(b.finished_on.slice(0,4))===year)
  const monthly=monthNames.map((name,i)=>({name,items:yearly.filter(b=>Number(b.finished_on.slice(5,7))===i+1)}))
- const needsDates=finished.filter(b=>!b.finished_on||!/^\d{4}-\d{2}-\d{2}$/.test(b.finished_on)||!!(b.started_on&&b.finished_on<b.started_on))
+ const needsDates=finished.filter(b=>!validDate(b.finished_on)||!!(b.started_on&&(!validDate(b.started_on)||b.finished_on<b.started_on)))
  const reading=books.filter(b=>b.status==='reading')
  const dnf=books.filter(b=>b.status==='dnf')
  const formatCounts=yearly.reduce((acc,b)=>{const k=b.book_format||'unspecified';acc[k]=(acc[k]||0)+1;return acc},{})
