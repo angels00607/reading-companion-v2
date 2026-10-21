@@ -30,28 +30,9 @@ jobs:
           VITE_SUPABASE_URL: https://skenuigulnonrshkwelu.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_fch6NSx050hyF61mInrQPQ_hzlWW1-_
         run: npm run build
-      - name: Keep site files available to GitHub Pages Jekyll
+      - name: Prepare GitHub Pages output
         run: |
-          cp -R web/dist/. .
-          touch .nojekyll
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f index.html assets manifest.webmanifest icon.svg .nojekyll
-          if ! git diff --cached --quiet; then
-            git commit -m "Publish compiled Reading Companion website [skip ci]"
-            for attempt in 1 2 3; do
-            git fetch origin main
-            if git rebase origin/main && git push origin HEAD:main; then
-              break
-            fi
-            git rebase --abort || true
-            if [ "$attempt" -eq 3 ]; then
-              echo "Could not publish built files after three attempts"
-              exit 1
-            fi
-            sleep 3
-          done
-          fi
+          touch web/dist/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
