@@ -39,7 +39,18 @@ jobs:
           git add -f index.html assets manifest.webmanifest icon.svg .nojekyll
           if ! git diff --cached --quiet; then
             git commit -m "Publish compiled Reading Companion website [skip ci]"
-            git push origin HEAD:main
+            for attempt in 1 2 3; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              break
+            fi
+            git rebase --abort || true
+            if [ "$attempt" -eq 3 ]; then
+              echo "Could not publish built files after three attempts"
+              exit 1
+            fi
+            sleep 3
+          done
           fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
