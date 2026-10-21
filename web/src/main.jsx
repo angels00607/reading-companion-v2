@@ -150,6 +150,56 @@ function PromptChallengeView({books,session,year,variant,challenge}){
   {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm prompt match"><h2>Confirm assignment</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified this match with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
  </section>
 }
+const calendarMonths=[["January","Fresh Starts"],["February","Love Stories"],["March","Read Outside the Box"],["April","Spring Awakening"],["May","Whimsical Reads"],["June","Summer Escape"],["July","Adventure Awaits"],["August","Backlist Treasures"],["September","Back to School"],["October","Dark & Mysterious"],["November","Cozy Reads"],["December","Winter Magic"]]
+const calendarCatalog={"monthly":{"A":[["A New-to-You Author","The First Book in a Series","A Book You’ve Been Meaning to Read"],["Enemies Before Lovers","A Love Story in a City You Love","Love Against the Odds"],["A Genre You’ve Never Read","A Book You Wouldn’t Normally Pick","Judge a Book by Its Cover"],["A Book with Flowers on the Cover","A Story About New Beginnings","A Book Set in the Countryside"],["A Book with a Magical Creature","A Fairytale-Inspired Story","A Book with a Magical Object"],["A Book Set by the Sea","A Summer Romance","A Book with a Sunny Cover"],["A Journey to an Unknown Place","A Quest or Mission","A Book Set in the Wilderness"],["A Book on Your TBR for Over a Year","An Older Book by a Favorite Author","A Forgotten TBR Pick"],["A Book Set at a School or University","A Book About an Ambitious Character","A Book That Teaches You Something"],["A Murder Mystery","A Book with a Secret Society","A Book Featuring a Curse"],["A Small-Town Setting","A Book Featuring a Bookshop or Library","A Comfort Read"],["A Book Set During Winter","A Holiday Romance","A Book with Snow on the Cover"]],"B":[["A Genre You Rarely Read","A Recent Addition to Your TBR","A Fresh Release"],["Friends Before Lovers","An Unexpected Romance","More Than Romantic Love"],["Let Someone Else Choose Your Read","A Book with an Unusual Premise","A Book That Divides Readers"],["A Pastel-Colored Cover","A Story About Personal Growth","A Character with Nature-Based Powers"],["A Book Featuring a Witch","A Story with a Touch of Magic","A Book with a Whimsical Cover"],["A Vacation Gone Wrong","A Book Set on an Island","A Road Trip Story"],["A Dangerous Journey","A Search for Something Lost","An Adventure with an Unlikely Team"],["The Oldest Book on Your TBR","A Book You Bought but Never Read","A Series You’ve Been Meaning to Continue"],["A Dark Academia Read","A Book Featuring a Competition","A Book with a Mentor–Student Dynamic"],["A Psychological Thriller","A Book with a Mysterious Disappearance","A Book Featuring Dark Magic"],["A Book Set During Autumn","A Story Centered Around Family","A Book Featuring Food or Baking"],["A Book Set During the Holidays","A Book Set Somewhere Cold","A Book Featuring a Winter Sport"]]},"seasonal":{"A":[["A Book with an Animal on the Cover","A Book Featuring a Flower Shop","A Book with a Character Named After a Flower or Plant","A Book with a Colorful Cover","A Book with a Bird on the Cover"],["A Book Set in a Coastal Town","A Book Featuring a Road Trip","A Book with Sunglasses on the Cover","A Book Set on an Island","A Book Featuring a Summer Festival"],["A Book Set in a Small Town","A Book Featuring a Family Gathering","A Book Featuring Baking","A Book with Autumn Leaves on the Cover","A Book with an Orange Cover"],["A Book Set Somewhere Cold","A Book Featuring a Winter Sport","A Book Featuring a Snowstorm","A Book with a Cozy Winter Cover","A Book Featuring a Cabin"]],"B":[["A Book with Flowers on the Cover","A Book Set in the Countryside","A Book Featuring a Picnic","A Book Featuring a Rainy Setting","A Book Set on a Farm"],["A Book Featuring a Swimming Pool","A Book Set at a Beach Resort","A Book with a Tropical Cover","A Book Featuring a 4th of July Celebration","A Book Set During a Heatwave"],["A Book Featuring a Pumpkin","A Book Set in a Bookshop","A Book Featuring Apple Picking","A Book Set During Autumn","A Book Featuring a Bonfire"],["A Book with Snow on the Cover","A Holiday Romance","A Book Featuring Ice Skating","A Book Featuring a Christmas Market","A Book Featuring a Fireplace"]]}}
+const seasons=['Spring','Summer','Autumn','Winter']
+function CalendarChallengeView({books,session,year,variant,challenge}){
+ const [entries,setEntries]=useState([])
+ const [error,setError]=useState('')
+ const [pending,setPending]=useState(null)
+ const [confirmed,setConfirmed]=useState(false)
+ const [busy,setBusy]=useState(false)
+ const [selected,setSelected]=useState(challenge==='monthly'?'January':'Spring')
+ const slots=challenge==='monthly'?calendarMonths.map(x=>x[0]):seasons
+ const slotIndex=slots.indexOf(selected)
+ const prompts=calendarCatalog[challenge][variant][slotIndex]||[]
+ useEffect(()=>{setSelected(challenge==='monthly'?'January':'Spring')},[challenge])
+ async function refresh(){
+  const {data,error}=await supabase.from('rc_calendar_challenge_entries').select('id,slot,prompt_index,book_id').eq('challenge',challenge).eq('challenge_year',year)
+  if(error)setError(error.message);else{setEntries(data||[]);setError('')}
+ }
+ useEffect(()=>{setEntries([]);setPending(null);refresh()},[year,challenge,session.user.id])
+ const monthNumber=calendarMonths.findIndex(x=>x[0]===selected)+1
+ const seasonMonths={Spring:[3,4,5],Summer:[6,7,8],Autumn:[9,10,11],Winter:[12,1,2]}
+ const eligible=books.filter(b=>{if(b.status!=='finished'||!b.finished_on?.startsWith(String(year))||entries.some(e=>e.book_id===b.id))return false
+  const m=Number(b.finished_on.slice(5,7))
+  return challenge==='monthly'?m===monthNumber:seasonMonths[selected].includes(m)
+ })
+ async function assign(){
+  if(!pending||!confirmed)return
+  setBusy(true);setError('')
+  const {error}=await supabase.from('rc_calendar_challenge_entries').insert({user_id:session.user.id,challenge,challenge_year:year,slot:selected,prompt_index:pending.index,book_id:pending.bookId,verified_by_user:true})
+  if(error)setError(error.message);else{setPending(null);setConfirmed(false)}
+  await refresh();setBusy(false)
+ }
+ async function remove(id){setBusy(true);const {error}=await supabase.from('rc_calendar_challenge_entries').delete().eq('id',id);if(error)setError(error.message);await refresh();setBusy(false)}
+ return <section>
+  <h2>{challenge==='monthly'?'Monthly':'Seasonal'} Challenge · Version {variant}</h2>
+  <p>{entries.length} / {challenge==='monthly'?36:20} prompts filled</p>
+  <div className="challengeSwitch">{slots.map(slot=><button key={slot} className={selected===slot?'active':''} onClick={()=>{setSelected(slot);setPending(null)}}>{slot}{entries.some(e=>e.slot===slot)?' · '+entries.filter(e=>e.slot===slot).length:''}</button>)}</div>
+  <h3>{selected}{challenge==='monthly'?' — '+calendarMonths[slotIndex][1]:''}</h3>
+  <p className="statsNote">Books must be finished during {challenge==='monthly'?'the selected month':'the selected season'} of {year}. Each book can fill only one prompt in this challenge for the year. Confirm a match only when you have verified it with at least 70% confidence.</p>
+  {error&&<p className="message" role="alert">{error}</p>}
+  <div className="alphabetGrid">{prompts.map((label,i)=>{
+   const entry=entries.find(e=>e.slot===selected&&e.prompt_index===i+1)
+   const book=entry&&books.find(b=>b.id===entry.book_id)
+   return <article key={i} className={entry?'filled':''}><strong className="cityTitle">{label}</strong><span>{book?.title||'Available'}</span>
+    {entry?<button className="subtle" disabled={busy} onClick={()=>remove(entry.id)}>Remove</button>:<select aria-label={'Choose book for '+label} value="" disabled={busy||!eligible.length} onChange={e=>{setPending({index:i+1,bookId:e.target.value});setConfirmed(false)}}><option value="">{eligible.length?'Choose book…':'No eligible books'}</option>{eligible.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
+   </article>
+  })}</div>
+  {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm prompt match"><h2>Confirm assignment</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><p>{prompts[pending.index-1]}</p><label className="checkLabel"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> I verified this match with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!confirmed||busy} onClick={assign}>Assign book</button></div></section></div>}
+ </section>
+}
 const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 function ChallengesView({books,session}){
  const [year,setYear]=useState(new Date().getFullYear())
@@ -172,9 +222,9 @@ function ChallengesView({books,session}){
  const years=[...new Set([new Date().getFullYear(),...books.map(b=>Number(b.finished_on?.slice(0,4))).filter(y=>y>=2020&&y<=2100)])].sort((a,b)=>b-a)
  return <section className="challenges">
   <div className="hero"><h2>Reading challenges</h2><p>Track your prompts with verified books. Each book can fill only one Alphabet prompt per year.</p></div>
-  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button><button className={challengeTab==='tropes'?'active':''} onClick={()=>setChallengeTab('tropes')}>Tropes</button><button className={challengeTab==='archetypes'?'active':''} onClick={()=>setChallengeTab('archetypes')}>Archetypes</button></div>
-  <div className="statsHeading"><h2>{({alphabet:'Alphabet Challenge',world:'Around the World',tropes:'Tropes Challenge',archetypes:'Archetypes Challenge'})[challengeTab]} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
-  {challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:challengeTab==='tropes'||challengeTab==='archetypes'?<PromptChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:<>
+  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button><button className={challengeTab==='tropes'?'active':''} onClick={()=>setChallengeTab('tropes')}>Tropes</button><button className={challengeTab==='archetypes'?'active':''} onClick={()=>setChallengeTab('archetypes')}>Archetypes</button><button className={challengeTab==='monthly'?'active':''} onClick={()=>setChallengeTab('monthly')}>Monthly</button><button className={challengeTab==='seasonal'?'active':''} onClick={()=>setChallengeTab('seasonal')}>Seasonal</button></div>
+  <div className="statsHeading"><h2>{({alphabet:'Alphabet Challenge',world:'Around the World',tropes:'Tropes Challenge',archetypes:'Archetypes Challenge',monthly:'Monthly Challenge',seasonal:'Seasonal Challenge'})[challengeTab]} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  {challengeTab==='monthly'||challengeTab==='seasonal'?<CalendarChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:challengeTab==='tropes'||challengeTab==='archetypes'?<PromptChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:<>
   <p>{entries.length} / 26 letters filled · {26-entries.length} available</p>
   {error&&<p role="alert" className="message">{error}</p>}
   <div className="alphabetGrid">{alphabet.map(letter=>{
