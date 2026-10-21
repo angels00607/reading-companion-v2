@@ -52,21 +52,6 @@ function AroundWorldView({books,session,year,variant}){
  const [busy,setBusy]=useState(false)
  useEffect(()=>{let active=true;setEntries([]);setPending(null);setVerified(false);supabase.from('rc_world_entries').select('id,city,book_id').eq('challenge_year',year).then(({data,error})=>{if(active){if(error)setError(error.message);else{setEntries(data||[]);setError('')}}});return()=>{active=false}},[year,session.user.id])
  const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!entries.some(e=>e.book_id===b.id))
- const seriesGroups=Object.values(books.filter(b=>b.series_name?.trim()).reduce((acc,b)=>{const key=b.series_name.trim().toLocaleLowerCase();if(!acc[key])acc[key]=[];acc[key].push(b);return acc},{}))
- const seriesCandidates=seriesGroups.flatMap(group=>{
-  if(!group.some(b=>['finished','reading'].includes(b.status)))return []
-  const unread=group.filter(b=>b.status==='to_read'&&b.series_number!=null).sort((a,b)=>Number(a.series_number)-Number(b.series_number))
-  if(!unread.length)return []
-  const next=unread[0]
-  const previous=group.filter(b=>['finished','reading'].includes(b.status)&&b.series_number!=null)
-  if(!previous.length||!previous.some(b=>Number(b.series_number)<Number(next.series_number)))return []
-  return [{name:next.series_name,book:next}]
- })
- function drawSeries(){
-  if(!seriesCandidates.length){setSeriesSuggestion(null);return}
-  const pick=seriesCandidates[Math.floor(Math.random()*seriesCandidates.length)]
-  setSeriesSuggestion(pick)
- }
  async function refresh(){const {data,error}=await supabase.from('rc_world_entries').select('id,city,book_id').eq('challenge_year',year);if(error)setError(error.message);else setEntries(data||[])}
  async function assign(){
   if(!pending||!verified)return
@@ -225,6 +210,21 @@ function RouletteView({books,session,year,variant}){
  const [busy,setBusy]=useState(false)
  const [seriesSuggestion,setSeriesSuggestion]=useState(null)
  const catalog=rouletteCatalog[variant]
+ const seriesGroups=Object.values(books.filter(b=>b.series_name?.trim()).reduce((acc,b)=>{const key=b.series_name.trim().toLocaleLowerCase();if(!acc[key])acc[key]=[];acc[key].push(b);return acc},{}))
+ const seriesCandidates=seriesGroups.flatMap(group=>{
+  if(!group.some(b=>['finished','reading'].includes(b.status)))return []
+  const unread=group.filter(b=>b.status==='to_read'&&b.series_number!=null).sort((a,b)=>Number(a.series_number)-Number(b.series_number))
+  if(!unread.length)return []
+  const next=unread[0]
+  const previous=group.filter(b=>['finished','reading'].includes(b.status)&&b.series_number!=null)
+  if(!previous.length||!previous.some(b=>Number(b.series_number)<Number(next.series_number)))return []
+  return [{name:next.series_name,book:next}]
+ })
+ function drawSeries(){
+  if(!seriesCandidates.length){setSeriesSuggestion(null);return}
+  const pick=seriesCandidates[Math.floor(Math.random()*seriesCandidates.length)]
+  setSeriesSuggestion(pick)
+ }
  async function refresh(){
   const {data:p,error:pe}=await supabase.from('rc_roulette_prompts').select('id,position,label,explanation').eq('challenge_year',year).order('position')
   if(pe){setError(pe.message);return}
