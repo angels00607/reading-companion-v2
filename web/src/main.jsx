@@ -458,6 +458,8 @@ function StoryGraphImport({books,onImport,busy}){
    if(next.raw_pages!==''&&(next.pages===null||!Number.isInteger(next.pages)||next.pages<1||next.pages>100000))warnings.push('Invalid page count')
    if(next.raw_date&&!validDate(next.raw_date))warnings.push('Invalid finish date')
    if(next.raw_rating!==''&&(next.rating===null||!Number.isInteger(next.rating)||next.rating<1||next.rating>5))warnings.push('Rating not a whole star (1–5)')
+   next.finished_on=next.status==='finished'&&validDate(next.raw_date)?next.raw_date:null
+   next.rating=next.status==='finished'&&next.raw_rating!==''&&Number.isInteger(Number(next.raw_rating))&&Number(next.raw_rating)>=1&&Number(next.raw_rating)<=5?Number(next.raw_rating):null
    next.warnings=warnings
    return next
   }))
