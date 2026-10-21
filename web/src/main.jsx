@@ -387,11 +387,15 @@ function App(){
   if(book.status===status)return
   const now=new Date();const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')
   const payload={status}
+  if(status==='to_read'&&(book.started_on||book.finished_on)){
+   if(!confirm('Move this book back to To Read and clear its reading dates?'))return
+   payload.started_on=null;payload.finished_on=null
+  }
   if(status==='reading'&&!book.started_on)payload.started_on=today
   if(status==='finished'){
    if(!book.started_on)payload.started_on=today
    if(!book.finished_on)payload.finished_on=today
-  }else if(book.status==='finished'&&book.finished_on){
+  }else if(status!=='to_read'&&book.status==='finished'&&book.finished_on){
    const confirmed=confirm('This book has a finish date. Keep the finish date when changing its status? Select Cancel to clear it.')
    if(!confirmed)payload.finished_on=null
   }
@@ -428,6 +432,8 @@ function App(){
   e.preventDefault()
   if(journalDraft.started_on&&journalDraft.finished_on&&journalDraft.finished_on<journalDraft.started_on){setMessage('Finish date cannot be before start date.');return}
   if(journalDraft.rating!==null&&journalDraft.rating!==''&&journalDraft.status!=='finished'){setMessage('Ratings are for finished books only.');return}
+  if(journalDraft.status==='finished'&&!journalDraft.finished_on){setMessage('Finished books need a finish date for yearly statistics and challenges.');return}
+  if(journalDraft.status==='to_read'&&(journalDraft.started_on||journalDraft.finished_on)){setMessage('To Read books cannot have reading dates. Change the status first, or clear the dates.');return}
   const payload={started_on:journalDraft.started_on||null,finished_on:journalDraft.finished_on||null,rating:journalDraft.status==='finished'?(journalDraft.rating===''?null:journalDraft.rating):null,review:journalDraft.review||'',favorite:!!journalDraft.favorite}
   setBusy(true)
   const {data,error}=await supabase.from('rc_books').update(payload).eq('id',journalDraft.id).eq('updated_at',journalDraft.updated_at).select('id')
