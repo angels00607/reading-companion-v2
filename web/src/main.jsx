@@ -385,16 +385,17 @@ function App(){
  async function add(e){e.preventDefault();if(!title.trim())return;setBusy(true);const {error}=await supabase.from('rc_books').insert({title:title.trim(),author:author.trim(),user_id:session.user.id});setBusy(false);if(error)setMessage(error.message);else{setTitle('');setAuthor('');await load()}}
  async function change(book,status){
   if(book.status===status)return
-  const today=new Date().toLocaleDateString('en-CA')
+  const now=new Date();const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')
   const payload={status}
   if(status==='reading'&&!book.started_on)payload.started_on=today
   if(status==='finished'){
-   if(!book.started_on)payload.started_on=book.started_on||today
+   if(!book.started_on)payload.started_on=today
    if(!book.finished_on)payload.finished_on=today
   }else if(book.status==='finished'&&book.finished_on){
    const confirmed=confirm('This book has a finish date. Keep the finish date when changing its status? Select Cancel to clear it.')
    if(!confirmed)payload.finished_on=null
   }
+  if(payload.finished_on&&book.started_on&&payload.finished_on<book.started_on){setMessage('The finish date cannot be earlier than the existing start date. Edit the journal dates first.');return}
   const {data,error}=await supabase.from('rc_books').update(payload).eq('id',book.id).eq('updated_at',book.updated_at).select('id')
   if(error)setMessage(error.message);else if(!data?.length)setMessage('This book changed on another device. Sync and try again.');await load()
  }
