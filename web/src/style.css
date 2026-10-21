@@ -95,3 +95,5 @@
 .tbrOptions label{display:flex;flex:1;min-width:120px;flex-direction:column;gap:5px;font-size:.82rem}
 .tbrOptions select,.tbrOptions input{width:100%;min-height:40px;border:1px solid var(--border);border-radius:9px;padding:8px;background:var(--card);color:var(--text)}
 .tbrResult small{display:block;font-size:.8rem;opacity:.8}
+
+.seriesToolbar .seriesWarningToggle{flex-direction:row;align-items:center;gap:7px;min-width:155px;flex:0 1 auto;padding-bottom:10px}.seriesWarningToggle input{width:17px;height:17px;min-height:0;flex-shrink:0}
