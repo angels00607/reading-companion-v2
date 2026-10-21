@@ -70,3 +70,11 @@
 .seriesSettings label{flex:1;min-width:115px;display:flex;flex-direction:column;gap:4px;font-size:.78rem}
 .seriesSettings select,.seriesSettings input{width:100%;min-height:39px;border:1px solid var(--border);border-radius:9px;padding:7px;background:var(--card);color:var(--text)}
 .seriesSettings button{min-height:39px}
+
+
+/* Series completion */
+.seriesProgress{display:flex;flex-direction:column;gap:5px;margin:12px 0}
+.seriesProgressTrack{height:9px;background:var(--border);border-radius:999px;overflow:hidden}
+.seriesProgressTrack span{display:block;height:100%;background:var(--accent);border-radius:inherit}
+.seriesProgress small{font-size:.78rem;opacity:.8}
+.seriesCaution{font-size:.8rem;line-height:1.5;border-left:2px solid var(--border);padding-left:9px;margin:8px 0}
