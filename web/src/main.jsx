@@ -3,8 +3,8 @@ import {createRoot} from 'react-dom/client'
 import {supabase} from './supabase'
 import './style.css'
 
-const tabs=['Home','Library','Journal','Challenges','Statistics']
-const accent={Home:'#8364AC',Library:'#695080',Journal:'#B76C9D',Challenges:'#417CA5',Statistics:'#315C87'}
+const tabs=['Home','Library','Series','Journal','Challenges','Statistics']
+const accent={Home:'#8364AC',Library:'#695080',Series:'#6E739F',Journal:'#B76C9D',Challenges:'#417CA5',Statistics:'#315C87'}
 const formats=[['','Not selected'],['paperback','Paperback'],['hardcover','Hardcover'],['ebook','E-book'],['audiobook','Audiobook']]
 const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished','Finished'],['dnf','DNF']]
 const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
