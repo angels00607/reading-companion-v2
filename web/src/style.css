@@ -8,3 +8,19 @@
 .alphabetGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:16px 0}.alphabetGrid article{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;min-width:0}.alphabetGrid article strong{font-size:1.5rem;color:var(--accent)}.alphabetGrid article span{overflow-wrap:anywhere;flex:1}.alphabetGrid article.filled{border-color:var(--accent)}.alphabetGrid select{max-width:100%;min-width:0}.alphabetGrid .subtle{align-self:flex-start}
 
 .challengeSwitch{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.challengeSwitch button{border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:12px;padding:10px 16px}.challengeSwitch button.active{background:var(--accent);color:white;border-color:var(--accent)}.alphabetGrid .cityTitle{font-size:1.08rem;overflow-wrap:anywhere}
+
+
+/* Reading Roulette: editorial facing-page spread */
+.rouletteSpread{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.25rem;align-items:stretch;margin-top:1.25rem}
+.roulettePage{background:var(--card,#fff);border:1px solid var(--border,#d9cde2);border-radius:18px;padding:1.35rem 1.25rem;box-shadow:0 8px 24px rgba(49,35,79,.07);display:flex;flex-direction:column;gap:0}
+.roulettePageHeading{display:flex;justify-content:space-between;align-items:center;gap:.5rem;letter-spacing:.15em;font-size:.69rem;font-weight:700;color:#695080;border-bottom:1px solid #b9a6cf;padding-bottom:.8rem;margin-bottom:.25rem}
+.rouletteEntry{display:grid;grid-template-columns:2.2rem minmax(0,1fr);gap:.65rem;padding:1.1rem 0;border-bottom:1px solid #e9e1ee}
+.rouletteNumber{font-size:1.2rem;font-family:Georgia,serif;color:#9674b1}
+.rouletteContent h3{font-family:Georgia,serif;font-size:1.07rem;margin:0 0 .3rem;color:var(--text,#322746)}
+.rouletteContent p{font-size:.86rem;line-height:1.55;margin:0 0 .75rem;opacity:.85}
+.rouletteTitle{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.82rem}
+.rouletteTitle label,.rouletteTitle>span{font-style:italic;color:#78648a}
+.rouletteTitle select{flex:1;min-width:130px;max-width:100%;font-size:.82rem}
+.rouletteTitle strong{overflow-wrap:anywhere}
+.roulettePageFooter{margin-top:auto;padding-top:1rem;font-size:.68rem;letter-spacing:.16em;color:#816998;text-align:right}
+@media(max-width:740px){.rouletteSpread{grid-template-columns:1fr}.roulettePage{padding:1.1rem}}
