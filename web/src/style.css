@@ -150,3 +150,9 @@
 .importPreview{max-height:16rem;overflow:auto;border:1px solid var(--border,#b9aec7);border-radius:.6rem;margin:1rem 0}
 .importPreview>div{padding:.55rem .75rem;border-bottom:1px solid var(--border,#b9aec7);overflow-wrap:anywhere}
 .importPreview>div:last-child{border-bottom:0}
+
+.importCorrection{padding:.85rem;border-bottom:1px solid var(--border,#b9aec7)}
+.importCorrection p{margin:.4rem 0}
+.importCorrectionFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:.65rem;margin-top:.7rem}
+.importCorrectionFields label{display:grid;gap:.3rem;min-width:0}
+.importCorrectionFields input,.importCorrectionFields select{width:100%;min-width:0}
