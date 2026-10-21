@@ -14,6 +14,12 @@ function StatisticsView({books}){
  const dated=finished.filter(b=>/^\d{4}-\d{2}-\d{2}$/.test(b.finished_on||''))
  const yearly=dated.filter(b=>Number(b.finished_on.slice(0,4))===year)
  const monthly=monthNames.map((name,i)=>({name,items:yearly.filter(b=>Number(b.finished_on.slice(5,7))===i+1)}))
+ const needsDates=finished.filter(b=>!b.finished_on||!/^\\d{4}-\\d{2}-\\d{2}$/.test(b.finished_on)||!!(b.started_on&&b.finished_on<b.started_on))
+ const reading=books.filter(b=>b.status==='reading')
+ const dnf=books.filter(b=>b.status==='dnf')
+ const formatCounts=yearly.reduce((acc,b)=>{const k=b.book_format||'unspecified';acc[k]=(acc[k]||0)+1;return acc},{})
+ const authorCounts=yearly.reduce((acc,b)=>{const k=b.author?.trim()||'Unknown author';acc[k]=(acc[k]||0)+1;return acc},{})
+ const topAuthors=Object.entries(authorCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,5)
  const pages=items=>items.reduce((n,b)=>n+(b.page_count||0),0)
  const rated=items=>items.filter(b=>Number.isInteger(b.rating)&&b.rating>=1&&b.rating<=5)
  const average=items=>{const r=rated(items);return r.length?(r.reduce((s,b)=>s+b.rating,0)/r.length).toFixed(1):'—'}
@@ -27,6 +33,7 @@ function StatisticsView({books}){
    <article><strong>{average(finished)}</strong><span>Average rating</span></article>
    <article><strong>{finished.filter(b=>b.favorite).length}</strong><span>Favorites</span></article>
   </div>
+  <div className="statGrid"><article><strong>{reading.length}</strong><span>Currently reading</span></article><article><strong>{books.filter(b=>b.status==='to_read').length}</strong><span>To Read</span></article><article><strong>{dnf.length}</strong><span>DNF (excluded)</span></article></div>
   <p className="statsNote">{finished.length-dated.length} finished {finished.length-dated.length===1?'book has':'books have'} no finish date and {finished.filter(b=>!b.page_count).length} {finished.filter(b=>!b.page_count).length===1?'book has':'books have'} no page count. Missing values are never estimated.</p>
   <div className="statsHeading"><h2>Yearly</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
   <div className="statGrid">
@@ -36,6 +43,8 @@ function StatisticsView({books}){
   </div>
   <h2>Monthly · {year}</h2>
   <div className="monthGrid">{monthly.map(m=><article key={m.name}><strong>{m.name}</strong><span>{m.items.length} {m.items.length===1?'book':'books'}</span><small>{pages(m.items).toLocaleString('en-US')} known pages</small></article>)}</div>
+  <h2>Reading breakdown · {year}</h2><div className="statGrid"><article><h3>Formats</h3>{Object.entries(formatCounts).sort((a,b)=>b[1]-a[1]).map(([format,count])=><p key={format}>{formats.find(f=>f[0]===format)?.[1]||'Not specified'}: <strong>{count}</strong></p>)}{!yearly.length&&<p>No finished books.</p>}</article><article><h3>Most-read authors</h3>{topAuthors.map(([author,count])=><p key={author}>{author}: <strong>{count}</strong></p>)}{!topAuthors.length&&<p>No finished books.</p>}</article></div>
+  {needsDates.length>0&&<section className="statsReview"><h3>Books needing date review ({needsDates.length})</h3><p>These finished books cannot be placed reliably in a reading year. Open their journal entries to check dates.</p><ul>{needsDates.slice(0,20).map(b=><li key={b.id}>{b.title}{b.finished_on?' · check date order':' · missing finish date'}</li>)}</ul>{needsDates.length>20&&<p>And {needsDates.length-20} more.</p>}</section>}
   <h2>Books finished in {year}</h2>
   <div className="cards">{yearly.slice().sort((a,b)=>b.finished_on.localeCompare(a.finished_on)).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.finished_on} · {b.author||'Unknown author'}</p></article>)}{!yearly.length&&<p>No dated finished books for this year.</p>}</div>
  </section>
