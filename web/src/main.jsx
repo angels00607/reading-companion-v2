@@ -76,6 +76,7 @@ function AroundWorldView({books,session,year,variant}){
   {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm city match"><h2>Confirm {pending.city}</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified that this book matches the city with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
  </section>
 }
+const tropeCatalog={"A":["Enemies to Lovers","Friends to Lovers","Fake Dating","Marriage of Convenience","Forced Proximity","Slow Burn","Only One Bed","Grumpy × Sunshine","Found Family","Second Chance","Forbidden Love","Royal Romance","Morally Grey Hero","Opposites Attract","Secret Identity","Hidden Powers","Academy Setting","Fated Mates","Arranged Marriage","Best Friend’s Brother"],"B":["Sports Romance","Brother’s Best Friend","Pen Pals","Single Parent","Workplace Romance","Small Town Romance","Holiday Romance","Roommates","Neighbors to Lovers","Childhood Friends to Lovers","Age Gap","Mistaken Identity","Love at First Sight","Friends with Benefits","Love Triangle","Amnesia","Revenge","He Falls First","She Falls First","Surprise Pregnancy"]}
 function PromptChallengeView({books,session,year,variant,challenge}){
  const [prompts,setPrompts]=useState([])
  const [assignments,setAssignments]=useState([])
@@ -90,7 +91,19 @@ function PromptChallengeView({books,session,year,variant,challenge}){
    supabase.from('rc_prompt_assignments').select('id,prompt_id,book_id').eq('challenge_year',year)
   ])
   if(p.error||a.error)setError(p.error?.message||a.error?.message)
-  else{setPrompts(p.data||[]);setAssignments((a.data||[]).filter(x=>(p.data||[]).some(y=>y.id===x.prompt_id)))}
+  else{
+   let list=p.data||[]
+   if(challenge==='tropes'){
+    const missing=tropeCatalog[variant].flatMap((label,i)=>list.some(x=>x.position===i+1)?[]:[{user_id:session.user.id,challenge,variant,position:i+1,label}])
+    if(missing.length){
+     const inserted=await supabase.from('rc_custom_prompts').upsert(missing,{onConflict:'user_id,challenge,variant,position',ignoreDuplicates:true})
+     if(inserted.error)setError(inserted.error.message)
+     const latest=await supabase.from('rc_custom_prompts').select('id,position,label').eq('challenge',challenge).eq('variant',variant).order('position')
+     if(!latest.error)list=latest.data||[]
+    }
+   }
+   setPrompts(list);setAssignments((a.data||[]).filter(x=>list.some(y=>y.id===x.prompt_id)))
+  }
  }
  useEffect(()=>{setPrompts([]);setAssignments([]);setDrafts({});setPending(null);refresh()},[year,variant,challenge,session.user.id])
  async function savePrompt(position){
@@ -111,11 +124,11 @@ function PromptChallengeView({books,session,year,variant,challenge}){
   await refresh();setBusy(false)
  }
  async function remove(id){setBusy(true);const {error}=await supabase.from('rc_prompt_assignments').delete().eq('id',id);if(error)setError(error.message);await refresh();setBusy(false)}
- const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!assignments.some(a=>a.book_id===b.id))
+ const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!assignments.some(a=>a.book_id===b.id)&&!(challenge==='tropes'&&b.series_name?.trim()&&assignments.filter(a=>{const other=books.find(x=>x.id===a.book_id);return other?.series_name?.trim().toLowerCase()===b.series_name.trim().toLowerCase()}).length>=2))
  return <section>
   <h2>{challenge==='tropes'?'Tropes':'Archetypes'} · Version {variant}</h2>
   <p>{assignments.length} filled · {prompts.length} defined prompts</p>
-  <p className="statsNote">Enter the exact prompts from your journal in their original positions. The app does not invent missing prompts. Assign only books you have verified at 70% confidence or higher.</p>
+  <p className="statsNote">{challenge==='tropes'?'The 20 official prompts are prefilled. A book can fill only one trope per year, with at most two books from the same series.':'Enter your exact Archetypes prompts in their original positions.'} Assign only verified matches (at least 70% confidence).</p>
   {error&&<p className="message" role="alert">{error}</p>}
   <div className="alphabetGrid">{Array.from({length:20},(_,i)=>i+1).map(position=>{
    const prompt=prompts.find(p=>p.position===position)
@@ -124,8 +137,8 @@ function PromptChallengeView({books,session,year,variant,challenge}){
    const value=drafts[position]??prompt?.label??''
    return <article key={position} className={entry?'filled':''}><strong>{position}</strong>
     {entry?<><span>{prompt.label}</span><small>{book?.title||'Book unavailable'}</small><button className="subtle" disabled={busy} onClick={()=>remove(entry.id)}>Remove</button></>:<>
-     <input aria-label={'Prompt '+position} placeholder="Exact prompt…" value={value} onChange={e=>setDrafts(d=>({...d,[position]:e.target.value}))}/>
-     {value.trim()&&value.trim()!==prompt?.label&&<button className="subtle" disabled={busy} onClick={()=>savePrompt(position)}>Save prompt</button>}
+     <input aria-label={'Prompt '+position} placeholder="Exact prompt…" value={value} readOnly={challenge==='tropes'} onChange={e=>setDrafts(d=>({...d,[position]:e.target.value}))}/>
+     {challenge!=='tropes'&&value.trim()&&value.trim()!==prompt?.label&&<button className="subtle" disabled={busy} onClick={()=>savePrompt(position)}>Save prompt</button>}
      {prompt&&<select aria-label={'Assign book to '+prompt.label} value="" disabled={busy||!eligible.length} onChange={e=>{setPending({promptId:prompt.id,bookId:e.target.value});setVerified(false)}}><option value="">{eligible.length?'Choose book…':'No eligible books'}</option>{eligible.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
     </>}
    </article>
@@ -177,7 +190,7 @@ function App(){
  const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[quotes,setQuotes]=useState([]),[quoteText,setQuoteText]=useState('')
  const [tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[])
- async function load(){if(!session)return;const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
+ async function load(){if(!session)return;const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite,series_name').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
  useEffect(()=>{if(session)load();else setBooks([])},[session?.user?.id])
  useEffect(()=>{const onFocus=()=>{if(session)load()};const onVisible=()=>{if(document.visibilityState==='visible'&&session)load()};window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onVisible);return()=>{window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible)}},[session])
  async function auth(mode){setBusy(true);setMessage('');const {error}=mode==='login'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password});setBusy(false);setMessage(error?error.message:mode==='signup'?'Account created. Check your email if confirmation is required.':'')}
@@ -197,7 +210,7 @@ function App(){
   if(draft.progress_mode==='page'&&pageCount===null){setMessage('Enter a page count to track pages, or select percent.');return}
   if(page<0||(pageCount!==null&&page>pageCount)||percent<0||percent>100){setMessage('Check your progress values.');return}
   setBusy(true)
-  const payload={title:draft.title.trim(),author:draft.author.trim(),book_format:draft.book_format||null,page_count:pageCount,current_page:page,progress_percent:percent,progress_mode:draft.progress_mode}
+  const payload={title:draft.title.trim(),author:draft.author.trim(),series_name:draft.series_name?.trim()||null,book_format:draft.book_format||null,page_count:pageCount,current_page:page,progress_percent:percent,progress_mode:draft.progress_mode}
   const {data,error}=await supabase.from('rc_books').update(payload).eq('id',draft.id).eq('updated_at',draft.updated_at).select('id')
   setBusy(false)
   if(error)setMessage(error.message)
@@ -256,6 +269,7 @@ function App(){
    {editing&&draft&&<div className="modalBackdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-label="Edit book"><h2>Edit book</h2><form onSubmit={saveBook}>
      <label>Title<input value={draft.title} required onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
      <label>Author<input value={draft.author} onChange={e=>setDraft({...draft,author:e.target.value})}/></label>
+     <label>Series (optional)<input value={draft.series_name||''} onChange={e=>setDraft({...draft,series_name:e.target.value})} placeholder="Series name"/></label>
      <label>Format<select value={draft.book_format||''} onChange={e=>setDraft({...draft,book_format:e.target.value})}>{formats.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
      <label>Tracking mode<select value={draft.progress_mode} onChange={e=>setDraft({...draft,progress_mode:e.target.value})}><option value="percent">Percent</option><option value="page">Pages</option></select></label>
      <label>Total pages (optional for percent)<input type="number" min="1" step="1" value={draft.page_count??''} onChange={e=>setDraft({...draft,page_count:e.target.value})}/></label>
