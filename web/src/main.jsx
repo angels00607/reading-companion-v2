@@ -407,7 +407,7 @@ function parseStoryGraphCSV(source){
  row.push(field);if(row.some(x=>x.trim()))rows.push(row)
  if(rows.length<2)throw new Error('CSV must include a header and at least one book.')
  const validDate=value=>{
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return false
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false
   const [y,m,d]=value.split('-').map(Number),parsed=new Date(Date.UTC(y,m-1,d))
   return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m-1&&parsed.getUTCDate()===d
  }
@@ -421,7 +421,7 @@ function parseStoryGraphCSV(source){
   const pagesRaw=find(r,'Number of Pages','Pages','Page Count')
   const pages=/^\d+$/.test(pagesRaw)&&Number(pagesRaw)>0&&Number(pagesRaw)<=100000?Number(pagesRaw):null
   const dateRaw=find(r,'Date Read','Date Finished','Finished Date')
-  const finishedOn=/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)?dateRaw:null
+  const finishedOn=validDate(dateRaw)?dateRaw:null
   const ratingRaw=find(r,'Star Rating','Rating')
   const rating=ratingRaw!==''&&Number.isInteger(Number(ratingRaw))&&Number(ratingRaw)>=1&&Number(ratingRaw)<=5?Number(ratingRaw):null
   const isbn=find(r,'ISBN/UID','ISBN','ISBN13').replace(/[^0-9Xx]/g,'')
