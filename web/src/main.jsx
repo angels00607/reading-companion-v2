@@ -321,6 +321,8 @@ function SeriesShelf({books,onEdit,onStart,session}){
  const [metadata,setMetadata]=useState([])
  const [saving,setSaving]=useState('')
  const [error,setError]=useState('')
+ const [seriesQuery,setSeriesQuery]=useState('')
+ const [seriesFilter,setSeriesFilter]=useState('all')
  useEffect(()=>{let active=true;supabase.from('rc_series').select('id,name,status,total_volumes').then(({data,error})=>{if(active){if(error)setError(error.message);else setMetadata(data||[])}});return()=>{active=false}},[session.user.id])
  async function saveSeries(group,status,total){
   setSaving(group.name);setError('')
@@ -334,9 +336,10 @@ function SeriesShelf({books,onEdit,onStart,session}){
  }
  const grouped=books.filter(b=>b.series_name?.trim()).reduce((acc,b)=>{const key=b.series_name.trim().toLocaleLowerCase();if(!acc[key])acc[key]={name:b.series_name.trim(),items:[]};acc[key].items.push(b);return acc},{})
  const groups=Object.values(grouped).sort((a,b)=>a.name.localeCompare(b.name))
+ const visibleGroups=groups.filter(g=>g.name.toLocaleLowerCase().includes(seriesQuery.trim().toLocaleLowerCase())&&(seriesFilter==='all'||(metadata.find(m=>m.name.toLocaleLowerCase()===g.name.toLocaleLowerCase())?.status||'ongoing')===seriesFilter))
  if(!groups.length)return <section className="hero"><h2>Your series</h2><p>Add a series name and optional volume number to a book to start tracking your series.</p></section>
  return <section className="seriesShelf"><div className="hero"><h2>Your series</h2><p>{groups.length} series in your library. Volumes are ordered by number when known; missing volumes are not invented.</p></div>
- <div className="seriesGrid">{groups.map(group=>{
+ <div className="seriesToolbar"><label>Find a series<input value={seriesQuery} onChange={e=>setSeriesQuery(e.target.value)} placeholder="Search series…" /></label><label>Publication status<select value={seriesFilter} onChange={e=>setSeriesFilter(e.target.value)}><option value="all">All series</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="abandoned">Abandoned</option></select></label><span>{visibleGroups.length} / {groups.length} series</span></div>{!visibleGroups.length&&<p>No series match your filters.</p>}<div className="seriesGrid">{visibleGroups.map(group=>{
   const ordered=[...group.items].sort((a,b)=>(a.series_number??Number.POSITIVE_INFINITY)-(b.series_number??Number.POSITIVE_INFINITY)||a.title.localeCompare(b.title))
   const unread=ordered.filter(b=>b.status==='to_read')
   const next=unread[0]
@@ -345,18 +348,18 @@ function SeriesShelf({books,onEdit,onStart,session}){
   const duplicates=[...new Set(numbered.filter((b,i)=>numbered.some((other,j)=>j!==i&&Number(other.series_number)===Number(b.series_number))).map(b=>Number(b.series_number)))]
   const mainVolumes=new Set(numbered.filter(b=>Number.isInteger(Number(b.series_number))).map(b=>Number(b.series_number)))
   const missing=meta?.total_volumes!=null&&meta.total_volumes<=500?Array.from({length:meta.total_volumes},(_,i)=>i+1).filter(n=>!mainVolumes.has(n)):[]
-  const allRecordedFinished=ordered.length>0&&ordered.every(b=>b.status==='finished')
-  const recordedComplete=meta?.total_volumes!=null&&missing.length===0&&duplicates.length===0&&allRecordedFinished
+  const mainBooks=numbered.filter(b=>Number.isInteger(Number(b.series_number))&&Number(b.series_number)>=1&&Number(b.series_number)<=(meta?.total_volumes??0))
+  const recordedComplete=meta?.total_volumes!=null&&meta.total_volumes<=500&&missing.length===0&&duplicates.length===0&&mainBooks.length===meta.total_volumes&&mainBooks.every(b=>b.status==='finished')
   return <article key={group.name} className="seriesCard"><h3>{group.name}</h3><form className="seriesSettings" onSubmit={e=>{e.preventDefault();saveSeries(group,e.currentTarget.elements.seriesStatus.value,e.currentTarget.elements.totalVolumes.value)}}><label>Series status<select name="seriesStatus" key={meta?.status||'ongoing'} defaultValue={meta?.status||'ongoing'}><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="abandoned">Abandoned</option></select></label><label>Total volumes (optional)<input name="totalVolumes" key={String(meta?.total_volumes??'')} type="number" min="1" step="1" defaultValue={meta?.total_volumes??''}/></label><button disabled={saving===group.name}>Save series</button></form><p>{ordered.filter(b=>b.status==='finished').length} finished · {ordered.length} recorded{meta?.total_volumes!=null?' · '+meta.total_volumes+' total volumes':''}</p>
    {meta?.total_volumes!=null&&<div className="seriesProgress"><div className="seriesProgressTrack" role="progressbar" aria-label={'Recorded finished books in '+group.name} aria-valuemin="0" aria-valuemax={meta.total_volumes} aria-valuenow={Math.min(ordered.filter(b=>b.status==='finished').length,meta.total_volumes)}><span style={{width:Math.min(100,100*ordered.filter(b=>b.status==='finished').length/meta.total_volumes)+'%'}}/></div><small>{ordered.filter(b=>b.status==='finished').length} recorded books finished / {meta.total_volumes} stated volumes</small></div>}
-   {meta?.total_volumes!=null&&ordered.length<meta.total_volumes&&<p className="seriesCaution">{meta.total_volumes-ordered.length} volumes not recorded, assuming one entry per volume. Missing titles are unknown.</p>}
-   {meta?.total_volumes!=null&&ordered.length>meta.total_volumes&&<p className="seriesCaution">More entries than the stated total. Check omnibus editions, extras, or the total volume count.</p>}
+   {meta?.total_volumes!=null&&mainVolumes.size<meta.total_volumes&&<p className="seriesCaution">The numbered main-volume collection may be incomplete. Extras and unnumbered books do not fill missing main-volume slots.</p>}
+   {meta?.total_volumes!=null&&ordered.length>meta.total_volumes&&<p className="seriesCaution">Additional entries may be novellas, extras, omnibus editions or duplicates; check their numbering.</p>}
    {ordered.some(b=>b.series_number==null)&&<p className="seriesCaution">Some volumes have no number; reading order may be incomplete.</p>}
    {duplicates.length>0&&<p className="seriesCaution">Repeated volume numbers: {duplicates.sort((a,b)=>a-b).join(', ')}. Check for duplicate entries or editions.</p>}
    {missing.length>0&&<p className="seriesCaution">Missing numbered volumes in your library: {missing.slice(0,18).join(', ')}{missing.length>18?' … ('+missing.length+' total)':''}. This assumes main volumes are numbered 1 through {meta.total_volumes}; special editions may differ.</p>}
    {meta?.total_volumes!=null&&meta.total_volumes>500&&<p className="seriesCaution">Volume gap detection is limited to series of 500 volumes or fewer.</p>}
    {meta?.status==='completed'&&<p className="seriesCaution">Publication complete (manually set) · {recordedComplete?'all numbered main volumes are recorded and marked finished':'your recorded reading may still be incomplete'}.</p>}
-   {recordedComplete&&<p className="seriesCompletion">All stated numbered main volumes are recorded and marked finished.</p>}
+   {recordedComplete&&<p className="seriesCompletion">All stated numbered main volumes are recorded and marked finished. Extras are tracked separately.</p>}
    <ol>{ordered.map(b=><li key={b.id}><span>{b.series_number!=null?'#'+b.series_number+' · ':''}{b.title}</span><small>{b.status==='finished'?'Finished':b.status==='reading'?'Reading':b.status==='dnf'?'DNF':'To Read'}</small><button className="subtle" onClick={()=>onEdit(b)}>Edit</button></li>)}</ol>
    {next&&<div className="seriesNext"><span>Next recorded unread volume: <strong>{next.title}</strong></span><button onClick={()=>onStart(next)}>Start reading</button></div>}
   </article>
