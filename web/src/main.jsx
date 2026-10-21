@@ -218,6 +218,8 @@ function RouletteView({books,session,year,variant}){
   const next=unread[0]
   const previous=group.filter(b=>['finished','reading'].includes(b.status)&&b.series_number!=null)
   if(!previous.length||!previous.some(b=>Number(b.series_number)<Number(next.series_number)))return []
+  const priorUnread=group.some(b=>b.status==='to_read'&&b.series_number!=null&&Number(b.series_number)<Number(next.series_number))
+  if(priorUnread)return []
   return [{name:next.series_name,book:next}]
  })
  function drawSeries(){
@@ -256,7 +258,7 @@ function RouletteView({books,session,year,variant}){
   <p>{entries.length} / 10 mechanisms completed · {year}</p>
   <p className="statsNote">Use each mechanism to choose your next read from your TBR. After finishing that book, record its title here.</p>
   {error&&<p className="message" role="alert">{error}</p>}
-  {variant==='B'&&<div className="rouletteSeriesTool"><div><strong>Random Series helper</strong><p>Draw a started series with a numbered unread volume in your TBR. This is a suggestion only; record it after reading.</p></div><button disabled={!seriesCandidates.length} onClick={drawSeries}>Draw a series</button>{seriesSuggestion&&<p role="status"><strong>{seriesSuggestion.name}</strong> — {seriesSuggestion.book.title} (volume {seriesSuggestion.book.series_number})</p>}{!seriesCandidates.length&&<small>No eligible started series with a numbered unread volume yet.</small>}</div>}
+  {variant==='B'&&<div className="rouletteSeriesTool"><div><strong>Random Series helper</strong><p>Draw a started series with a numbered unread volume in your TBR. Only volumes recorded in your library are considered. Check for missing volumes before starting; record the challenge after reading.</p></div><button disabled={!seriesCandidates.length} onClick={drawSeries}>Draw a series</button>{seriesSuggestion&&<p role="status"><strong>{seriesSuggestion.name}</strong> — {seriesSuggestion.book.title} (volume {seriesSuggestion.book.series_number})</p>}{!seriesCandidates.length&&<small>No eligible started series with a numbered unread volume yet.</small>}</div>}
   <div className="rouletteSpread">{[0,1].map(page=><section key={page} className="roulettePage" aria-label={'Reading Roulette page '+(page+1)}>
    <div className="roulettePageHeading"><span>READING ROULETTE</span><strong>{page===0?'01 — 05':'06 — 10'}</strong></div>
    {catalog.slice(page*5,page*5+5).map(([label,explanation],i)=>{
@@ -326,7 +328,7 @@ function SeriesShelf({books,onEdit,onStart}){
   const next=unread[0]
   return <article key={group.name} className="seriesCard"><h3>{group.name}</h3><p>{ordered.filter(b=>b.status==='finished').length} finished · {ordered.length} recorded</p>
    <ol>{ordered.map(b=><li key={b.id}><span>{b.series_number!=null?'#'+b.series_number+' · ':''}{b.title}</span><small>{b.status==='finished'?'Finished':b.status==='reading'?'Reading':b.status==='dnf'?'DNF':'To Read'}</small><button className="subtle" onClick={()=>onEdit(b)}>Edit</button></li>)}</ol>
-   {next&&<div className="seriesNext"><span>Next unread in your library: <strong>{next.title}</strong></span><button onClick={()=>onStart(next)}>Start reading</button></div>}
+   {next&&<div className="seriesNext"><span>Next recorded unread volume: <strong>{next.title}</strong></span><button onClick={()=>onStart(next)}>Start reading</button></div>}
   </article>
  })}</div></section>
 }
