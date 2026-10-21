@@ -398,7 +398,8 @@ function BookCatalogSearch({books,onAdd,busy}){
   e.preventDefault();const q=term.trim();if(q.length<2)return
   setLoading(true);setError('');setSearched(false);setResults([])
   try{
-   const isbn=/^(?:97[89])?\\d{10}$/.test(q.replace(/[\\s-]/g,''))?q.replace(/[\\s-]/g,''):null
+   const normalized=q.replace(/[^0-9Xx]/g,'')
+   const isbn=/^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$/.test(normalized)?normalized:null
    const query=isbn?'isbn:'+isbn:q
    const response=await fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(query)+'&maxResults=20&printType=books')
    if(!response.ok)throw new Error('Book catalog temporarily unavailable ('+response.status+').')
