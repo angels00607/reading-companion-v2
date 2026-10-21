@@ -436,11 +436,32 @@ function parseStoryGraphCSV(source){
 function StoryGraphImport({books,onImport,busy}){
  const [items,setItems]=useState([]),[error,setError]=useState(''),[name,setName]=useState(''),[includeDates,setIncludeDates]=useState(true)
  const key=x=>(x.title||'').trim().toLocaleLowerCase()+'|'+(x.author||'').trim().toLocaleLowerCase()
- const existing=new Set(books.map(key)),seen=new Set()
- const seenIsbns=new Set()
- const preview=items.map(x=>{const duplicate=existing.has(key(x))||(x.isbn_13&&books.some(b=>b.isbn_13===x.isbn_13))||(x.isbn_10&&books.some(b=>b.isbn_10===x.isbn_10))||seen.has(key(x))||(x.isbn_13&&seenIsbns.has(x.isbn_13))||(x.isbn_10&&seenIsbns.has(x.isbn_10));seen.add(key(x));if(x.isbn_13)seenIsbns.add(x.isbn_13);if(x.isbn_10)seenIsbns.add(x.isbn_10);return {...x,duplicate:!!duplicate}})
+ const existing=new Set(books.map(key)),seen=new Set(),seenIsbns=new Set()
+ const preview=items.map(x=>{
+  const duplicate=existing.has(key(x))||(x.isbn_13&&books.some(b=>b.isbn_13===x.isbn_13))||(x.isbn_10&&books.some(b=>b.isbn_10===x.isbn_10))||seen.has(key(x))||(x.isbn_13&&seenIsbns.has(x.isbn_13))||(x.isbn_10&&seenIsbns.has(x.isbn_10))
+  seen.add(key(x));if(x.isbn_13)seenIsbns.add(x.isbn_13);if(x.isbn_10)seenIsbns.add(x.isbn_10)
+  return {...x,duplicate:!!duplicate}
+ })
  const eligible=preview.filter(x=>!x.duplicate&&x.status&&x.warnings.length===0)
  const needsReview=preview.filter(x=>!x.duplicate&&(!x.status||x.warnings.length>0))
+ const validDate=value=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const [y,m,d]=value.split('-').map(Number),date=new Date(Date.UTC(y,m-1,d));return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d}
+ function edit(row,field,value){
+  setItems(current=>current.map(x=>{
+   if(x.row!==row)return x
+   const next={...x}
+   if(field==='status')next.status=value||null
+   if(field==='pages')next.pages=value===''?null:Number(value)
+   if(field==='finished_on')next.finished_on=value||null
+   if(field==='rating')next.rating=value===''?null:Number(value)
+   const warnings=[]
+   if(!next.status)warnings.push('Unrecognized reading status')
+   if(next.pages!==null&&(!Number.isInteger(next.pages)||next.pages<1||next.pages>100000))warnings.push('Invalid page count')
+   if(next.finished_on&&!validDate(next.finished_on))warnings.push('Invalid finish date')
+   if(next.rating!==null&&(!Number.isInteger(next.rating)||next.rating<1||next.rating>5))warnings.push('Rating not a whole star (1–5)')
+   next.warnings=warnings
+   return next
+  }))
+ }
  async function choose(e){
   const file=e.target.files?.[0];setItems([]);setError('');setName('')
   if(!file)return
@@ -448,7 +469,7 @@ function StoryGraphImport({books,onImport,busy}){
   try{const parsed=parseStoryGraphCSV(await file.text());if(parsed.length>10000)throw new Error('Maximum 10,000 books per file.');setItems(parsed);setName(file.name)}
   catch(err){setError(err.message||'Could not read CSV.')}
  }
- return <section className="storygraphImport"><h2>Import from StoryGraph</h2><p>Export your reading data as CSV from StoryGraph, then preview it here. The file is parsed on your device; only confirmed books are sent to your library.</p><label>StoryGraph CSV file<input type="file" accept=".csv,text/csv" onChange={choose} disabled={busy}/></label>{error&&<p role="alert">{error}</p>}{items.length>0&&<><p><strong>{name}</strong> · {items.length} books found · {eligible.length} new · {preview.filter(x=>x.duplicate).length} duplicates · {needsReview.length} need review</p><label className="importOption"><input type="checkbox" checked={includeDates} onChange={e=>setIncludeDates(e.target.checked)}/> Import finish dates and whole-star ratings when available</label><p>Rows with unrecognized statuses or invalid dates, pages or ratings are excluded until corrected in StoryGraph and re-exported. Fractional ratings are not rounded. Formats and series details are not guessed. Preview shows the first 20 rows.</p>{needsReview.length>0&&<details className="importIssues"><summary>Review {needsReview.length} excluded rows</summary><div className="importPreview">{needsReview.slice(0,100).map(x=><div key={x.row}><strong>Row {x.row}: {x.title}</strong> — {x.warnings.join('; ')}</div>)}{needsReview.length>100&&<p>Showing the first 100 issues. Correct the source CSV and re-import to review the rest.</p>}</div></details>}<div className="importPreview">{preview.slice(0,20).map(x=><div key={x.row}><strong>{x.title}</strong> — {x.author||'Unknown author'} <small>({x.status||'unknown status'}{x.duplicate?', duplicate':''}{x.warnings.length?', '+x.warnings.join('; '):''})</small></div>)}</div><button disabled={busy||!eligible.length} onClick={async()=>{const ok=await onImport(eligible,includeDates);if(ok){setItems([]);setName('')}}}> {busy?'Importing…':'Import '+eligible.length+' new books'}</button></>}</section>
+ return <section className="storygraphImport"><h2>Import from StoryGraph</h2><p>Export your reading data as CSV from StoryGraph, then preview it here. The file is parsed on your device; only confirmed books are sent to your library.</p><label>StoryGraph CSV file<input type="file" accept=".csv,text/csv" onChange={choose} disabled={busy}/></label>{error&&<p role="alert">{error}</p>}{items.length>0&&<><p><strong>{name}</strong> · {items.length} books found · {eligible.length} new · {preview.filter(x=>x.duplicate).length} duplicates · {needsReview.length} need review</p><label className="importOption"><input type="checkbox" checked={includeDates} onChange={e=>setIncludeDates(e.target.checked)}/> Import finish dates and whole-star ratings when available</label><p>Correct excluded rows below. Fractional ratings are not rounded automatically. Formats and series details are not guessed. Preview shows the first 20 rows.</p>{needsReview.length>0&&<details className="importIssues" open><summary>Review and correct {needsReview.length} excluded rows</summary><div className="importPreview">{needsReview.slice(0,100).map(x=><div className="importCorrection" key={x.row}><strong>Row {x.row}: {x.title}</strong><p role="status">{x.warnings.join('; ')}</p><div className="importCorrectionFields"><label>Status<select value={x.status||''} onChange={e=>edit(x.row,'status',e.target.value)} disabled={busy}><option value="">Select status</option><option value="to_read">To Read</option><option value="reading">Currently Reading</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label><label>Pages<input type="number" min="1" max="100000" value={x.pages??''} onChange={e=>edit(x.row,'pages',e.target.value)} disabled={busy}/></label><label>Finish date<input type="date" value={x.finished_on||''} onChange={e=>edit(x.row,'finished_on',e.target.value)} disabled={busy}/></label><label>Rating (whole stars)<select value={x.rating??''} onChange={e=>edit(x.row,'rating',e.target.value)} disabled={busy}><option value="">No rating</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select></label></div></div>)}{needsReview.length>100&&<p>Showing the first 100 issues.</p>}</div></details>}<div className="importPreview">{preview.slice(0,20).map(x=><div key={x.row}><strong>{x.title}</strong> — {x.author||'Unknown author'} <small>({x.status||'unknown status'}{x.duplicate?', duplicate':''}{x.warnings.length?', '+x.warnings.join('; '):''})</small></div>)}</div><button disabled={busy||!eligible.length} onClick={async()=>{const ok=await onImport(eligible,includeDates);if(ok){setItems([]);setName('')}}}>{busy?'Importing…':'Import '+eligible.length+' new books'}</button></>}</section>
 }
 function BookCatalogSearch({books,onAdd,busy}){
  const [term,setTerm]=useState(''),[mode,setMode]=useState('all'),[results,setResults]=useState([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[searched,setSearched]=useState(false),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false)
