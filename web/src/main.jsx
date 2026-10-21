@@ -52,6 +52,21 @@ function AroundWorldView({books,session,year,variant}){
  const [busy,setBusy]=useState(false)
  useEffect(()=>{let active=true;setEntries([]);setPending(null);setVerified(false);supabase.from('rc_world_entries').select('id,city,book_id').eq('challenge_year',year).then(({data,error})=>{if(active){if(error)setError(error.message);else{setEntries(data||[]);setError('')}}});return()=>{active=false}},[year,session.user.id])
  const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!entries.some(e=>e.book_id===b.id))
+ const seriesGroups=Object.values(books.filter(b=>b.series_name?.trim()).reduce((acc,b)=>{const key=b.series_name.trim().toLocaleLowerCase();if(!acc[key])acc[key]=[];acc[key].push(b);return acc},{}))
+ const seriesCandidates=seriesGroups.flatMap(group=>{
+  if(!group.some(b=>['finished','reading'].includes(b.status)))return []
+  const unread=group.filter(b=>b.status==='to_read'&&b.series_number!=null).sort((a,b)=>Number(a.series_number)-Number(b.series_number))
+  if(!unread.length)return []
+  const next=unread[0]
+  const previous=group.filter(b=>['finished','reading'].includes(b.status)&&b.series_number!=null)
+  if(!previous.length||!previous.some(b=>Number(b.series_number)<Number(next.series_number)))return []
+  return [{name:next.series_name,book:next}]
+ })
+ function drawSeries(){
+  if(!seriesCandidates.length){setSeriesSuggestion(null);return}
+  const pick=seriesCandidates[Math.floor(Math.random()*seriesCandidates.length)]
+  setSeriesSuggestion(pick)
+ }
  async function refresh(){const {data,error}=await supabase.from('rc_world_entries').select('id,city,book_id').eq('challenge_year',year);if(error)setError(error.message);else setEntries(data||[])}
  async function assign(){
   if(!pending||!verified)return
@@ -208,6 +223,7 @@ function RouletteView({books,session,year,variant}){
  const [verified,setVerified]=useState(false)
  const [error,setError]=useState('')
  const [busy,setBusy]=useState(false)
+ const [seriesSuggestion,setSeriesSuggestion]=useState(null)
  const catalog=rouletteCatalog[variant]
  async function refresh(){
   const {data:p,error:pe}=await supabase.from('rc_roulette_prompts').select('id,position,label,explanation').eq('challenge_year',year).order('position')
@@ -240,6 +256,7 @@ function RouletteView({books,session,year,variant}){
   <p>{entries.length} / 10 mechanisms completed · {year}</p>
   <p className="statsNote">Use each mechanism to choose your next read from your TBR. After finishing that book, record its title here.</p>
   {error&&<p className="message" role="alert">{error}</p>}
+  {variant==='B'&&<div className="rouletteSeriesTool"><div><strong>Random Series helper</strong><p>Draw a started series with a numbered unread volume in your TBR. This is a suggestion only; record it after reading.</p></div><button disabled={!seriesCandidates.length} onClick={drawSeries}>Draw a series</button>{seriesSuggestion&&<p role="status"><strong>{seriesSuggestion.name}</strong> — {seriesSuggestion.book.title} (volume {seriesSuggestion.book.series_number})</p>}{!seriesCandidates.length&&<small>No eligible started series with a numbered unread volume yet.</small>}</div>}
   <div className="rouletteSpread">{[0,1].map(page=><section key={page} className="roulettePage" aria-label={'Reading Roulette page '+(page+1)}>
    <div className="roulettePageHeading"><span>READING ROULETTE</span><strong>{page===0?'01 — 05':'06 — 10'}</strong></div>
    {catalog.slice(page*5,page*5+5).map(([label,explanation],i)=>{
