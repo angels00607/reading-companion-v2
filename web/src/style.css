@@ -138,3 +138,8 @@
 .catalogConfirm form{display:grid;gap:.7rem}
 .catalogConfirm form label{display:grid;gap:.3rem}
 .catalogConfirmActions{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
+
+.editionMetadata{border:1px solid var(--border,#b9aec7);border-radius:.65rem;padding:.8rem;min-width:0;overflow-wrap:anywhere}
+.editionMetadata legend{font-weight:700;padding:0 .3rem}
+.editionMetadata p{margin:.3rem 0 .65rem}
+.editionMetadata>div{margin:.3rem 0}
