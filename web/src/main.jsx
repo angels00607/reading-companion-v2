@@ -405,7 +405,7 @@ function App(){
    payload.started_on=null;payload.finished_on=null
   }
   if(status==='reading'&&!book.started_on)payload.started_on=today
-  if(status==='reading'&&book.status==='finished'&&book.finished_on){payload.finished_on=null;setMessage('The previous finish date was cleared because the book is being read again.')}
+  if(status==='reading'&&book.status==='finished'&&book.finished_on){payload.finished_on=null}
   if(status==='finished'){
    if(!book.started_on)payload.started_on=today
    if(!book.finished_on)payload.finished_on=today
@@ -415,7 +415,7 @@ function App(){
   }
   if(payload.finished_on&&book.started_on&&payload.finished_on<book.started_on){setMessage('The finish date cannot be earlier than the existing start date. Edit the journal dates first.');return}
   const {data,error}=await supabase.from('rc_books').update(payload).eq('id',book.id).eq('updated_at',book.updated_at).select('id')
-  if(error)setMessage(error.message);else if(!data?.length)setMessage('This book changed on another device. Sync and try again.');await load()
+  if(error)setMessage(error.message);else if(!data?.length)setMessage('This book changed on another device. Sync and try again.');else if(status==='reading'&&book.status==='finished'&&book.finished_on)setMessage('Reading restarted. The previous finish date was cleared.');await load()
  }
  function openEditor(book){setEditing(book.id);setDraft({...book})}
  function viewSeriesInLibrary(name){setTab('Library');setLibraryStatus('all');setQuery(name)}
