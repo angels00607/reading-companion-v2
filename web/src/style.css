@@ -32,3 +32,13 @@
 .libraryToolbar select{min-height:42px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px}
 .libraryToolbar>span{margin-left:auto;font-size:.84rem;opacity:.7;padding-bottom:10px}
 @media(max-width:600px){.libraryToolbar label{flex:1;min-width:125px}.libraryToolbar>span{width:100%;margin-left:0;padding:0}}
+
+
+/* TBR picker */
+.tbrPicker{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin:16px 0;padding:18px;border:1px solid var(--border);background:var(--card);border-radius:16px}
+.tbrPicker>div:first-child{flex:1;min-width:190px}
+.tbrPicker h3{margin:0 0 5px;font-size:1.05rem}
+.tbrPicker p{margin:0;font-size:.86rem;opacity:.8}
+.tbrResult{width:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px}
+.tbrResult strong{flex:1;min-width:130px}
+.tbrResult span{font-size:.86rem;opacity:.75}
