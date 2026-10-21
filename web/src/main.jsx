@@ -10,6 +10,7 @@ const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished
 function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
  const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null)
+ const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[quotes,setQuotes]=useState([]),[quoteText,setQuoteText]=useState('')
  const [tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[])
  async function load(){if(!session)return;const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
@@ -40,6 +41,30 @@ function App(){
   else{setEditing(null);setDraft(null)}
   await load()
  }
+ function openJournal(book){setJournalBook(book.id);setJournalDraft({...book});setQuoteText('');loadQuotes(book.id)}
+ async function loadQuotes(bookId){const {data,error}=await supabase.from('rc_quotes').select('id,quote,created_at').eq('book_id',bookId).order('created_at',{ascending:false});if(error)setMessage(error.message);else setQuotes(data)}
+ async function saveJournal(e){
+  e.preventDefault()
+  if(journalDraft.started_on&&journalDraft.finished_on&&journalDraft.finished_on<journalDraft.started_on){setMessage('Finish date cannot be before start date.');return}
+  if(journalDraft.rating!==null&&journalDraft.rating!==''&&journalDraft.status!=='finished'){setMessage('Ratings are for finished books only.');return}
+  const payload={started_on:journalDraft.started_on||null,finished_on:journalDraft.finished_on||null,rating:journalDraft.status==='finished'?(journalDraft.rating===''?null:journalDraft.rating):null,review:journalDraft.review||'',favorite:!!journalDraft.favorite}
+  setBusy(true)
+  const {data,error}=await supabase.from('rc_books').update(payload).eq('id',journalDraft.id).eq('updated_at',journalDraft.updated_at).select('id')
+  setBusy(false)
+  if(error)setMessage(error.message)
+  else if(!data?.length)setMessage('This book was changed on another device. Sync and reopen your journal entry.')
+  else{setJournalBook(null);setJournalDraft(null)}
+  await load()
+ }
+ async function addQuote(e){
+  e.preventDefault()
+  if(!quoteText.trim())return
+  setBusy(true)
+  const {error}=await supabase.from('rc_quotes').insert({user_id:session.user.id,book_id:journalBook,quote:quoteText.trim()})
+  setBusy(false)
+  if(error)setMessage(error.message);else{setQuoteText('');await loadQuotes(journalBook)}
+ }
+ async function deleteQuote(id){if(!confirm('Delete this quote?'))return;const {error}=await supabase.from('rc_quotes').delete().eq('id',id);if(error)setMessage(error.message);else await loadQuotes(journalBook)}
  async function remove(book){
   if(!confirm('Delete this book?'))return
   const {data,error}=await supabase.from('rc_books').delete().eq('id',book.id).eq('updated_at',book.updated_at).select('id')
@@ -51,8 +76,17 @@ function App(){
   <main>
    <div className="account"><span>{session.user.email}</span><div><button className="subtle" onClick={load}>↻ Sync</button><button className="subtle" onClick={()=>supabase.auth.signOut()}>Sign out</button></div></div>
    {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
+   tab==='Journal'?<><div className="hero"><h2>Your reading journal</h2><p>Reviews, reading dates, favorite books and quotes. DNF books are kept separate from completed reads.</p></div><div className="cards">{books.filter(b=>b.status==='finished'||b.status==='dnf'||b.status==='reading').map(b=><article key={b.id}><strong>{b.favorite?'♥ ':''}{b.title}</strong><p>{b.author||'Unknown author'} · {statuses.find(s=>s[0]===b.status)?.[1]}</p>{b.rating&&b.status==='finished'&&<p aria-label={`${b.rating} out of 5 stars`}>{'★'.repeat(b.rating)}{'☆'.repeat(5-b.rating)}</p>}{b.review&&<p>{b.review}</p>}<button className="subtle" onClick={()=>openJournal(b)}>Journal entry</button></article>)}{!books.some(b=>['finished','dnf','reading'].includes(b.status))&&<p>Start reading a book to create your first journal entry.</p>}</div></>:
    tab==='Library'?<><form className="add" onSubmit={add}><h2>Add a book</h2><input placeholder="Book title" aria-label="Book title" value={title} onChange={e=>setTitle(e.target.value)} required/><input placeholder="Author" aria-label="Author" value={author} onChange={e=>setAuthor(e.target.value)}/><button disabled={busy}>Add Book</button></form><input className="search" placeholder="Search your books…" aria-label="Search books" value={query} onChange={e=>setQuery(e.target.value)}/><div className="cards">{books.filter(b=>(b.title+' '+b.author).toLowerCase().includes(query.toLowerCase())).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author||'Unknown author'}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}{b.book_format?` · ${formats.find(f=>f[0]===b.book_format)?.[1]}`:''}</p><div className="bookActions"><select aria-label={'Reading status for '+b.title} value={b.status} onChange={e=>change(b,e.target.value)}>{statuses.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><button className="subtle" onClick={()=>openEditor(b)}>Edit</button><button className="subtle" onClick={()=>remove(b)}>Delete</button></div></article>)}</div></>:
    <div className="hero"><h2>{tab} is coming soon</h2><p>The library comes first. This section will be added without unnecessary complexity.</p></div>}
+   {journalBook&&journalDraft&&<div className="modalBackdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-label="Reading journal entry"><h2>{journalDraft.title}</h2><form onSubmit={saveJournal}>
+    <label>Started on<input type="date" value={journalDraft.started_on||''} onChange={e=>setJournalDraft({...journalDraft,started_on:e.target.value})}/></label>
+    <label>Finished on<input type="date" value={journalDraft.finished_on||''} onChange={e=>setJournalDraft({...journalDraft,finished_on:e.target.value})}/></label>
+    {journalDraft.status==='finished'&&<label>Rating (whole stars)<select value={journalDraft.rating??''} onChange={e=>setJournalDraft({...journalDraft,rating:e.target.value===''?null:Number(e.target.value)})}><option value="">Not rated</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n} / 5</option>)}</select></label>}
+    <label>Review<textarea rows="4" value={journalDraft.review||''} onChange={e=>setJournalDraft({...journalDraft,review:e.target.value})}/></label>
+    <label className="checkLabel"><input type="checkbox" checked={!!journalDraft.favorite} onChange={e=>setJournalDraft({...journalDraft,favorite:e.target.checked})}/> Favorite</label>
+    <div className="editorActions"><button type="button" className="secondary" onClick={()=>{setJournalBook(null);setJournalDraft(null)}}>Close</button><button disabled={busy}>Save journal</button></div>
+   </form><hr/><h3>Quotes</h3><form onSubmit={addQuote}><textarea rows="3" placeholder="Save a favorite quote…" value={quoteText} onChange={e=>setQuoteText(e.target.value)}/><button disabled={busy||!quoteText.trim()}>Add quote</button></form><div className="quotes">{quotes.map(q=><blockquote key={q.id}>{q.quote}<button className="subtle" onClick={()=>deleteQuote(q.id)}>Delete</button></blockquote>)}</div></section></div>}
    {editing&&draft&&<div className="modalBackdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-label="Edit book"><h2>Edit book</h2><form onSubmit={saveBook}>
      <label>Title<input value={draft.title} required onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
      <label>Author<input value={draft.author} onChange={e=>setDraft({...draft,author:e.target.value})}/></label>
