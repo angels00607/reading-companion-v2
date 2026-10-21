@@ -143,3 +143,10 @@
 .editionMetadata legend{font-weight:700;padding:0 .3rem}
 .editionMetadata p{margin:.3rem 0 .65rem}
 .editionMetadata>div{margin:.3rem 0}
+
+.storygraphImport{margin:1.25rem 0;padding:1.1rem;border:1px solid var(--border,#b9aec7);border-radius:1rem}
+.storygraphImport>label{display:grid;gap:.45rem;margin:1rem 0}
+.storygraphImport .importOption{display:flex;align-items:center;gap:.5rem}
+.importPreview{max-height:16rem;overflow:auto;border:1px solid var(--border,#b9aec7);border-radius:.6rem;margin:1rem 0}
+.importPreview>div{padding:.55rem .75rem;border-bottom:1px solid var(--border,#b9aec7);overflow-wrap:anywhere}
+.importPreview>div:last-child{border-bottom:0}
