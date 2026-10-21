@@ -7,13 +7,46 @@ const tabs=['Home','Library','Journal','Challenges','Statistics']
 const accent={Home:'#8364AC',Library:'#695080',Journal:'#B76C9D',Challenges:'#417CA5',Statistics:'#315C87'}
 const formats=[['','Not selected'],['paperback','Paperback'],['hardcover','Hardcover'],['ebook','E-book'],['audiobook','Audiobook']]
 const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished','Finished'],['dnf','DNF']]
+const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function StatisticsView({books}){
+ const [year,setYear]=useState(new Date().getFullYear())
+ const finished=books.filter(b=>b.status==='finished')
+ const dated=finished.filter(b=>/^\d{4}-\d{2}-\d{2}$/.test(b.finished_on||''))
+ const yearly=dated.filter(b=>Number(b.finished_on.slice(0,4))===year)
+ const monthly=monthNames.map((name,i)=>({name,items:yearly.filter(b=>Number(b.finished_on.slice(5,7))===i+1)}))
+ const pages=items=>items.reduce((n,b)=>n+(b.page_count||0),0)
+ const rated=items=>items.filter(b=>Number.isInteger(b.rating)&&b.rating>=1&&b.rating<=5)
+ const average=items=>{const r=rated(items);return r.length?(r.reduce((s,b)=>s+b.rating,0)/r.length).toFixed(1):'—'}
+ const current=new Date().getFullYear()
+ const years=[...new Set([current,...dated.map(b=>Number(b.finished_on.slice(0,4)))])].sort((a,b)=>b-a)
+ return <section className="stats">
+  <div className="hero"><h2>Your reading statistics</h2><p>Only finished books count. Add a finish date to include a book in monthly and yearly totals.</p></div>
+  <h2>Lifetime</h2><div className="statGrid">
+   <article><strong>{finished.length}</strong><span>Finished books</span></article>
+   <article><strong>{pages(finished).toLocaleString('en-US')}</strong><span>Known pages</span></article>
+   <article><strong>{average(finished)}</strong><span>Average rating</span></article>
+   <article><strong>{finished.filter(b=>b.favorite).length}</strong><span>Favorites</span></article>
+  </div>
+  <p className="statsNote">{finished.length-dated.length} finished {finished.length-dated.length===1?'book has':'books have'} no finish date and {finished.filter(b=>!b.page_count).length} {finished.filter(b=>!b.page_count).length===1?'book has':'books have'} no page count. Missing values are never estimated.</p>
+  <div className="statsHeading"><h2>Yearly</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  <div className="statGrid">
+   <article><strong>{yearly.length}</strong><span>Finished books</span></article>
+   <article><strong>{pages(yearly).toLocaleString('en-US')}</strong><span>Known pages</span></article>
+   <article><strong>{average(yearly)}</strong><span>Average rating</span></article>
+  </div>
+  <h2>Monthly · {year}</h2>
+  <div className="monthGrid">{monthly.map(m=><article key={m.name}><strong>{m.name}</strong><span>{m.items.length} {m.items.length===1?'book':'books'}</span><small>{pages(m.items).toLocaleString('en-US')} known pages</small></article>)}</div>
+  <h2>Books finished in {year}</h2>
+  <div className="cards">{yearly.slice().sort((a,b)=>b.finished_on.localeCompare(a.finished_on)).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.finished_on} · {b.author||'Unknown author'}</p></article>)}{!yearly.length&&<p>No dated finished books for this year.</p>}</div>
+ </section>
+}
 function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
  const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null)
  const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[quotes,setQuotes]=useState([]),[quoteText,setQuoteText]=useState('')
  const [tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[])
- async function load(){if(!session)return;const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
+ async function load(){if(!session)return;const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
  useEffect(()=>{if(session)load();else setBooks([])},[session?.user?.id])
  useEffect(()=>{const onFocus=()=>{if(session)load()};const onVisible=()=>{if(document.visibilityState==='visible'&&session)load()};window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onVisible);return()=>{window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible)}},[session])
  async function auth(mode){setBusy(true);setMessage('');const {error}=mode==='login'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password});setBusy(false);setMessage(error?error.message:mode==='signup'?'Account created. Check your email if confirmation is required.':'')}
@@ -77,6 +110,7 @@ function App(){
    <div className="account"><span>{session.user.email}</span><div><button className="subtle" onClick={load}>↻ Sync</button><button className="subtle" onClick={()=>supabase.auth.signOut()}>Sign out</button></div></div>
    {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
    tab==='Journal'?<><div className="hero"><h2>Your reading journal</h2><p>Reviews, reading dates, favorite books and quotes. DNF books are kept separate from completed reads.</p></div><div className="cards">{books.filter(b=>b.status==='finished'||b.status==='dnf'||b.status==='reading').map(b=><article key={b.id}><strong>{b.favorite?'♥ ':''}{b.title}</strong><p>{b.author||'Unknown author'} · {statuses.find(s=>s[0]===b.status)?.[1]}</p>{b.rating&&b.status==='finished'&&<p aria-label={`${b.rating} out of 5 stars`}>{'★'.repeat(b.rating)}{'☆'.repeat(5-b.rating)}</p>}{b.review&&<p>{b.review}</p>}<button className="subtle" onClick={()=>openJournal(b)}>Journal entry</button></article>)}{!books.some(b=>['finished','dnf','reading'].includes(b.status))&&<p>Start reading a book to create your first journal entry.</p>}</div></>:
+   tab==='Statistics'?<StatisticsView books={books}/>:
    tab==='Library'?<><form className="add" onSubmit={add}><h2>Add a book</h2><input placeholder="Book title" aria-label="Book title" value={title} onChange={e=>setTitle(e.target.value)} required/><input placeholder="Author" aria-label="Author" value={author} onChange={e=>setAuthor(e.target.value)}/><button disabled={busy}>Add Book</button></form><input className="search" placeholder="Search your books…" aria-label="Search books" value={query} onChange={e=>setQuery(e.target.value)}/><div className="cards">{books.filter(b=>(b.title+' '+b.author).toLowerCase().includes(query.toLowerCase())).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author||'Unknown author'}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}{b.book_format?` · ${formats.find(f=>f[0]===b.book_format)?.[1]}`:''}</p><div className="bookActions"><select aria-label={'Reading status for '+b.title} value={b.status} onChange={e=>change(b,e.target.value)}>{statuses.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><button className="subtle" onClick={()=>openEditor(b)}>Edit</button><button className="subtle" onClick={()=>remove(b)}>Delete</button></div></article>)}</div></>:
    <div className="hero"><h2>{tab} is coming soon</h2><p>The library comes first. This section will be added without unnecessary complexity.</p></div>}
    {journalBook&&journalDraft&&<div className="modalBackdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-label="Reading journal entry"><h2>{journalDraft.title}</h2><form onSubmit={saveJournal}>
