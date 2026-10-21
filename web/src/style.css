@@ -113,3 +113,17 @@
 .seriesCard .volumeKind{display:inline-block;margin-left:.45rem;padding:.15rem .48rem;border:1px solid currentColor;border-radius:999px;font-size:.72rem;font-weight:600;white-space:nowrap;vertical-align:middle;opacity:.88}
 .seriesCard .volumeKind-extra{border-style:dashed}
 .seriesCard .volumeKind-omnibus{border-style:double;border-width:3px}
+
+/* Book catalog discovery */
+.catalogSearch{margin:1.25rem 0;padding:1.1rem;border:1px solid var(--border, #b9aec7);border-radius:1rem}
+.catalogSearchForm{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0}
+.catalogSearchForm input{flex:1 1 16rem;min-width:0}
+.catalogResults{display:grid;gap:.8rem;margin-top:1rem}
+.catalogResult{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:1rem;align-items:start;padding:1rem;border:1px solid var(--border, #b9aec7);border-radius:.75rem}
+.catalogResult img{width:72px;height:auto;max-height:115px;object-fit:contain;border-radius:.3rem}
+.catalogResult>div{grid-column:2;min-width:0;overflow-wrap:anywhere}
+.catalogResult:not(:has(img))>div{grid-column:1 / 3}
+.catalogResult p{margin:.3rem 0}
+.catalogResult details{margin-top:.6rem}
+.catalogResult details p{line-height:1.45}
+@media(max-width:620px){.catalogResult{grid-template-columns:58px minmax(0,1fr)}.catalogResult img{width:58px}.catalogResult>button{grid-column:1 / -1;justify-self:stretch}}
