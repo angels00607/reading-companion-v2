@@ -406,13 +406,18 @@ function parseStoryGraphCSV(source){
  if(quoted)throw new Error('CSV has an unclosed quoted field.')
  row.push(field);if(row.some(x=>x.trim()))rows.push(row)
  if(rows.length<2)throw new Error('CSV must include a header and at least one book.')
+ const validDate=value=>{
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return false
+  const [y,m,d]=value.split('-').map(Number),parsed=new Date(Date.UTC(y,m-1,d))
+  return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m-1&&parsed.getUTCDate()===d
+ }
  const headers=rows.shift().map(x=>x.replace(/^\uFEFF/,'').trim().toLowerCase().replace(/[^a-z0-9]/g,''))
  const find=(record,...keys)=>{for(const key of keys){const i=headers.indexOf(key.replace(/[^a-z0-9]/g,''));if(i>=0&&record[i]?.trim())return record[i].trim()}return ''}
  if(!headers.includes('title')||!headers.some(h=>h==='authors'||h==='author'))throw new Error('This CSV does not have recognizable StoryGraph Title and Authors columns.')
  return rows.map((r,index)=>{
   const title=find(r,'Title'),author=find(r,'Authors','Author')
-  const statusRaw=find(r,'Read Status','Status').toLowerCase()
-  const status=statusRaw.includes('did not finish')||statusRaw==='dnf'?'dnf':statusRaw.includes('currently reading')||statusRaw==='reading'?'reading':statusRaw==='read'||statusRaw==='finished'?'finished':'to_read'
+  const statusRaw=find(r,'Read Status','Status').trim().toLowerCase()
+  const status=statusRaw.includes('did not finish')||statusRaw==='dnf'?'dnf':statusRaw.includes('currently reading')||statusRaw==='reading'?'reading':statusRaw==='read'||statusRaw==='finished'?'finished':statusRaw==='to-read'||statusRaw==='to read'||statusRaw==='to_read'?'to_read':null
   const pagesRaw=find(r,'Number of Pages','Pages','Page Count')
   const pages=/^\d+$/.test(pagesRaw)&&Number(pagesRaw)>0&&Number(pagesRaw)<=100000?Number(pagesRaw):null
   const dateRaw=find(r,'Date Read','Date Finished','Finished Date')
@@ -420,7 +425,12 @@ function parseStoryGraphCSV(source){
   const ratingRaw=find(r,'Star Rating','Rating')
   const rating=ratingRaw!==''&&Number.isInteger(Number(ratingRaw))&&Number(ratingRaw)>=1&&Number(ratingRaw)<=5?Number(ratingRaw):null
   const isbn=find(r,'ISBN/UID','ISBN','ISBN13').replace(/[^0-9Xx]/g,'')
-  return {row:index+2,title,author,status,pages,finished_on:status==='finished'?finishedOn:null,rating:status==='finished'?rating:null,isbn_13:/^\d{13}$/.test(isbn)?isbn:null,isbn_10:/^\d{9}[0-9Xx]$/.test(isbn)?isbn:null}
+  const warnings=[]
+  if(!status)warnings.push('Unrecognized reading status')
+  if(dateRaw&&!finishedOn)warnings.push('Invalid finish date')
+  if(ratingRaw&&rating===null)warnings.push('Rating not a whole star (1–5)')
+  if(pagesRaw&&!pages)warnings.push('Invalid page count')
+  return {row:index+2,title,author,status,warnings,pages,finished_on:status==='finished'?finishedOn:null,rating:status==='finished'?rating:null,isbn_13:/^\d{13}$/.test(isbn)?isbn:null,isbn_10:/^\d{9}[0-9Xx]$/.test(isbn)?isbn:null}
  }).filter(x=>x.title)
 }
 function StoryGraphImport({books,onImport,busy}){
@@ -429,7 +439,8 @@ function StoryGraphImport({books,onImport,busy}){
  const existing=new Set(books.map(key)),seen=new Set()
  const seenIsbns=new Set()
  const preview=items.map(x=>{const duplicate=existing.has(key(x))||(x.isbn_13&&books.some(b=>b.isbn_13===x.isbn_13))||(x.isbn_10&&books.some(b=>b.isbn_10===x.isbn_10))||seen.has(key(x))||(x.isbn_13&&seenIsbns.has(x.isbn_13))||(x.isbn_10&&seenIsbns.has(x.isbn_10));seen.add(key(x));if(x.isbn_13)seenIsbns.add(x.isbn_13);if(x.isbn_10)seenIsbns.add(x.isbn_10);return {...x,duplicate:!!duplicate}})
- const eligible=preview.filter(x=>!x.duplicate)
+ const eligible=preview.filter(x=>!x.duplicate&&x.status&&x.warnings.length===0)
+ const needsReview=preview.filter(x=>!x.duplicate&&(!x.status||x.warnings.length>0))
  async function choose(e){
   const file=e.target.files?.[0];setItems([]);setError('');setName('')
   if(!file)return
@@ -437,7 +448,7 @@ function StoryGraphImport({books,onImport,busy}){
   try{const parsed=parseStoryGraphCSV(await file.text());if(parsed.length>10000)throw new Error('Maximum 10,000 books per file.');setItems(parsed);setName(file.name)}
   catch(err){setError(err.message||'Could not read CSV.')}
  }
- return <section className="storygraphImport"><h2>Import from StoryGraph</h2><p>Export your reading data as CSV from StoryGraph, then preview it here. The file is parsed on your device; only confirmed books are sent to your library.</p><label>StoryGraph CSV file<input type="file" accept=".csv,text/csv" onChange={choose} disabled={busy}/></label>{error&&<p role="alert">{error}</p>}{items.length>0&&<><p><strong>{name}</strong> · {items.length} books found · {eligible.length} new · {preview.length-eligible.length} skipped as duplicates</p><label className="importOption"><input type="checkbox" checked={includeDates} onChange={e=>setIncludeDates(e.target.checked)}/> Import finish dates and whole-star ratings when available</label><p>Unknown statuses become To Read. Formats and series details are not guessed. Preview shows the first 20 rows.</p><div className="importPreview">{preview.slice(0,20).map(x=><div key={x.row}><strong>{x.title}</strong> — {x.author||'Unknown author'} <small>({x.status}{x.duplicate?', duplicate':''})</small></div>)}</div><button disabled={busy||!eligible.length} onClick={async()=>{const ok=await onImport(eligible,includeDates);if(ok){setItems([]);setName('')}}}> {busy?'Importing…':'Import '+eligible.length+' new books'}</button></>}</section>
+ return <section className="storygraphImport"><h2>Import from StoryGraph</h2><p>Export your reading data as CSV from StoryGraph, then preview it here. The file is parsed on your device; only confirmed books are sent to your library.</p><label>StoryGraph CSV file<input type="file" accept=".csv,text/csv" onChange={choose} disabled={busy}/></label>{error&&<p role="alert">{error}</p>}{items.length>0&&<><p><strong>{name}</strong> · {items.length} books found · {eligible.length} new · {preview.filter(x=>x.duplicate).length} duplicates · {needsReview.length} need review</p><label className="importOption"><input type="checkbox" checked={includeDates} onChange={e=>setIncludeDates(e.target.checked)}/> Import finish dates and whole-star ratings when available</label><p>Rows with unrecognized statuses or invalid dates, pages or ratings are excluded until corrected in StoryGraph and re-exported. Fractional ratings are not rounded. Formats and series details are not guessed. Preview shows the first 20 rows.</p><div className="importPreview">{preview.slice(0,20).map(x=><div key={x.row}><strong>{x.title}</strong> — {x.author||'Unknown author'} <small>({x.status||'unknown status'}{x.duplicate?', duplicate':''}{x.warnings.length?', '+x.warnings.join('; '):''})</small></div>)}</div><button disabled={busy||!eligible.length} onClick={async()=>{const ok=await onImport(eligible,includeDates);if(ok){setItems([]);setName('')}}}> {busy?'Importing…':'Import '+eligible.length+' new books'}</button></>}</section>
 }
 function BookCatalogSearch({books,onAdd,busy}){
  const [term,setTerm]=useState(''),[mode,setMode]=useState('all'),[results,setResults]=useState([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[searched,setSearched]=useState(false),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false)
