@@ -97,3 +97,5 @@
 .tbrResult small{display:block;font-size:.8rem;opacity:.8}
 
 .seriesToolbar .seriesWarningToggle{flex-direction:row;align-items:center;gap:7px;min-width:155px;flex:0 1 auto;padding-bottom:10px}.seriesWarningToggle input{width:17px;height:17px;min-height:0;flex-shrink:0}
+
+.tbrOptions .tbrSafety{flex-direction:row;align-items:center;min-width:230px;gap:8px}.tbrSafety input{width:17px;height:17px;min-height:0;flex-shrink:0}.seriesNext small{display:block;margin-top:4px;opacity:.75;font-size:.78rem}
