@@ -1,0 +1,15 @@
+name: Apple builds
+on:
+  push:
+  pull_request:
+jobs:
+  build:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        destination: ['generic/platform=iOS Simulator', 'generic/platform=macOS']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: xcodebuild -project ReadingCompanion.xcodeproj -scheme ReadingCompanion -destination '${{ matrix.destination }}' CODE_SIGNING_ALLOWED=NO build
