@@ -76,6 +76,63 @@ function AroundWorldView({books,session,year,variant}){
   {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm city match"><h2>Confirm {pending.city}</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified that this book matches the city with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
  </section>
 }
+function PromptChallengeView({books,session,year,variant,challenge}){
+ const [prompts,setPrompts]=useState([])
+ const [assignments,setAssignments]=useState([])
+ const [drafts,setDrafts]=useState({})
+ const [pending,setPending]=useState(null)
+ const [verified,setVerified]=useState(false)
+ const [busy,setBusy]=useState(false)
+ const [error,setError]=useState('')
+ async function refresh(){
+  const [p,a]=await Promise.all([
+   supabase.from('rc_custom_prompts').select('id,position,label').eq('challenge',challenge).eq('variant',variant).order('position'),
+   supabase.from('rc_prompt_assignments').select('id,prompt_id,book_id').eq('challenge_year',year)
+  ])
+  if(p.error||a.error)setError(p.error?.message||a.error?.message)
+  else{setPrompts(p.data||[]);setAssignments((a.data||[]).filter(x=>(p.data||[]).some(y=>y.id===x.prompt_id)))}
+ }
+ useEffect(()=>{setPrompts([]);setAssignments([]);setDrafts({});setPending(null);refresh()},[year,variant,challenge,session.user.id])
+ async function savePrompt(position){
+  const label=(drafts[position]??prompts.find(p=>p.position===position)?.label??'').trim()
+  if(!label)return
+  setBusy(true);setError('')
+  const existing=prompts.find(p=>p.position===position)
+  const payload={user_id:session.user.id,challenge,variant,position,label}
+  const {error}=existing?await supabase.from('rc_custom_prompts').update({label}).eq('id',existing.id):await supabase.from('rc_custom_prompts').insert(payload)
+  if(error)setError(error.message);else setDrafts(d=>({...d,[position]:undefined}))
+  await refresh();setBusy(false)
+ }
+ async function assign(){
+  if(!pending||!verified)return
+  setBusy(true);setError('')
+  const {error}=await supabase.from('rc_prompt_assignments').insert({user_id:session.user.id,prompt_id:pending.promptId,book_id:pending.bookId,challenge_year:year,verified_by_user:true})
+  if(error)setError(error.message);else{setPending(null);setVerified(false)}
+  await refresh();setBusy(false)
+ }
+ async function remove(id){setBusy(true);const {error}=await supabase.from('rc_prompt_assignments').delete().eq('id',id);if(error)setError(error.message);await refresh();setBusy(false)}
+ const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!assignments.some(a=>a.book_id===b.id))
+ return <section>
+  <h2>{challenge==='tropes'?'Tropes':'Archetypes'} · Version {variant}</h2>
+  <p>{assignments.length} filled · {prompts.length} defined prompts</p>
+  <p className="statsNote">Enter the exact prompts from your journal in their original positions. The app does not invent missing prompts. Assign only books you have verified at 70% confidence or higher.</p>
+  {error&&<p className="message" role="alert">{error}</p>}
+  <div className="alphabetGrid">{Array.from({length:20},(_,i)=>i+1).map(position=>{
+   const prompt=prompts.find(p=>p.position===position)
+   const entry=prompt&&assignments.find(a=>a.prompt_id===prompt.id)
+   const book=entry&&books.find(b=>b.id===entry.book_id)
+   const value=drafts[position]??prompt?.label??''
+   return <article key={position} className={entry?'filled':''}><strong>{position}</strong>
+    {entry?<><span>{prompt.label}</span><small>{book?.title||'Book unavailable'}</small><button className="subtle" disabled={busy} onClick={()=>remove(entry.id)}>Remove</button></>:<>
+     <input aria-label={'Prompt '+position} placeholder="Exact prompt…" value={value} onChange={e=>setDrafts(d=>({...d,[position]:e.target.value}))}/>
+     {value.trim()&&value.trim()!==prompt?.label&&<button className="subtle" disabled={busy} onClick={()=>savePrompt(position)}>Save prompt</button>}
+     {prompt&&<select aria-label={'Assign book to '+prompt.label} value="" disabled={busy||!eligible.length} onChange={e=>{setPending({promptId:prompt.id,bookId:e.target.value});setVerified(false)}}><option value="">{eligible.length?'Choose book…':'No eligible books'}</option>{eligible.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
+    </>}
+   </article>
+  })}</div>
+  {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm prompt match"><h2>Confirm assignment</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified this match with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
+ </section>
+}
 const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 function ChallengesView({books,session}){
  const [year,setYear]=useState(new Date().getFullYear())
@@ -98,9 +155,9 @@ function ChallengesView({books,session}){
  const years=[...new Set([new Date().getFullYear(),...books.map(b=>Number(b.finished_on?.slice(0,4))).filter(y=>y>=2020&&y<=2100)])].sort((a,b)=>b-a)
  return <section className="challenges">
   <div className="hero"><h2>Reading challenges</h2><p>Track your prompts with verified books. Each book can fill only one Alphabet prompt per year.</p></div>
-  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button></div>
-  <div className="statsHeading"><h2>{challengeTab==='alphabet'?'Alphabet Challenge':'Around the World'} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
-  {challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:<>
+  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button><button className={challengeTab==='tropes'?'active':''} onClick={()=>setChallengeTab('tropes')}>Tropes</button><button className={challengeTab==='archetypes'?'active':''} onClick={()=>setChallengeTab('archetypes')}>Archetypes</button></div>
+  <div className="statsHeading"><h2>{({alphabet:'Alphabet Challenge',world:'Around the World',tropes:'Tropes Challenge',archetypes:'Archetypes Challenge'})[challengeTab]} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  {challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:challengeTab==='tropes'||challengeTab==='archetypes'?<PromptChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:<>
   <p>{entries.length} / 26 letters filled · {26-entries.length} available</p>
   {error&&<p role="alert" className="message">{error}</p>}
   <div className="alphabetGrid">{alphabet.map(letter=>{
