@@ -40,6 +40,41 @@ function StatisticsView({books}){
   <div className="cards">{yearly.slice().sort((a,b)=>b.finished_on.localeCompare(a.finished_on)).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.finished_on} · {b.author||'Unknown author'}</p></article>)}{!yearly.length&&<p>No dated finished books for this year.</p>}</div>
  </section>
 }
+const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+function ChallengesView({books,session}){
+ const [year,setYear]=useState(new Date().getFullYear())
+ const [entries,setEntries]=useState([])
+ const [error,setError]=useState('')
+ const [working,setWorking]=useState(false)
+ const variant=year%2===0?'A':'B'
+ useEffect(()=>{let active=true;supabase.from('rc_challenge_entries').select('id,prompt,book_id').eq('challenge','alphabet').eq('challenge_year',year).then(({data,error})=>{if(active){if(error)setError(error.message);else{setEntries(data||[]);setError('')}}});return()=>{active=false}},[year,session.user.id])
+ const available=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year)))
+ async function assign(letter,bookId){
+  setWorking(true);setError('')
+  const existing=entries.find(e=>e.prompt===letter)
+  const {error}=bookId?await supabase.from('rc_challenge_entries').insert({user_id:session.user.id,challenge:'alphabet',challenge_year:year,prompt:letter,book_id:bookId}):existing?await supabase.from('rc_challenge_entries').delete().eq('id',existing.id):{error:null}
+  if(error)setError(error.message)
+  const result=await supabase.from('rc_challenge_entries').select('id,prompt,book_id').eq('challenge','alphabet').eq('challenge_year',year)
+  if(result.error)setError(result.error.message);else setEntries(result.data||[])
+  setWorking(false)
+ }
+ const years=[...new Set([new Date().getFullYear(),...books.map(b=>Number(b.finished_on?.slice(0,4))).filter(y=>y>=2020&&y<=2100)])].sort((a,b)=>b-a)
+ return <section className="challenges">
+  <div className="hero"><h2>Reading challenges</h2><p>Track your prompts with verified books. Each book can fill only one Alphabet prompt per year.</p></div>
+  <div className="statsHeading"><h2>Alphabet Challenge · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  <p>{entries.length} / 26 letters filled · {26-entries.length} available</p>
+  {error&&<p role="alert" className="message">{error}</p>}
+  <div className="alphabetGrid">{alphabet.map(letter=>{
+   const assigned=entries.find(e=>e.prompt===letter)
+   const match=assigned&&books.find(b=>b.id===assigned.book_id)
+   const choices=available.filter(b=>b.title.trim().charAt(0).toUpperCase()===letter&&!entries.some(e=>e.book_id===b.id))
+   return <article key={letter} className={assigned?'filled':''}><strong>{letter}</strong><span>{match?match.title:'Available'}</span>
+    {assigned?<button className="subtle" disabled={working} onClick={()=>assign(letter,null)}>Remove</button>:<select aria-label={'Assign a book to letter '+letter} disabled={working||!choices.length} value="" onChange={e=>assign(letter,e.target.value)}><option value="">{choices.length?'Choose book…':'No eligible books'}</option>{choices.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
+   </article>
+  })}</div>
+  <p className="statsNote">Eligible books must be marked Finished, have a finish date in the selected year, and begin with the selected letter. Other challenges will be added using your exact prompt lists.</p>
+ </section>
+}
 function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
  const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null)
@@ -111,6 +146,7 @@ function App(){
    {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
    tab==='Journal'?<><div className="hero"><h2>Your reading journal</h2><p>Reviews, reading dates, favorite books and quotes. DNF books are kept separate from completed reads.</p></div><div className="cards">{books.filter(b=>b.status==='finished'||b.status==='dnf'||b.status==='reading').map(b=><article key={b.id}><strong>{b.favorite?'♥ ':''}{b.title}</strong><p>{b.author||'Unknown author'} · {statuses.find(s=>s[0]===b.status)?.[1]}</p>{b.rating&&b.status==='finished'&&<p aria-label={`${b.rating} out of 5 stars`}>{'★'.repeat(b.rating)}{'☆'.repeat(5-b.rating)}</p>}{b.review&&<p>{b.review}</p>}<button className="subtle" onClick={()=>openJournal(b)}>Journal entry</button></article>)}{!books.some(b=>['finished','dnf','reading'].includes(b.status))&&<p>Start reading a book to create your first journal entry.</p>}</div></>:
    tab==='Statistics'?<StatisticsView books={books}/>:
+   tab==='Challenges'?<ChallengesView books={books} session={session}/>:
    tab==='Library'?<><form className="add" onSubmit={add}><h2>Add a book</h2><input placeholder="Book title" aria-label="Book title" value={title} onChange={e=>setTitle(e.target.value)} required/><input placeholder="Author" aria-label="Author" value={author} onChange={e=>setAuthor(e.target.value)}/><button disabled={busy}>Add Book</button></form><input className="search" placeholder="Search your books…" aria-label="Search books" value={query} onChange={e=>setQuery(e.target.value)}/><div className="cards">{books.filter(b=>(b.title+' '+b.author).toLowerCase().includes(query.toLowerCase())).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author||'Unknown author'}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}{b.book_format?` · ${formats.find(f=>f[0]===b.book_format)?.[1]}`:''}</p><div className="bookActions"><select aria-label={'Reading status for '+b.title} value={b.status} onChange={e=>change(b,e.target.value)}>{statuses.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><button className="subtle" onClick={()=>openEditor(b)}>Edit</button><button className="subtle" onClick={()=>remove(b)}>Delete</button></div></article>)}</div></>:
    <div className="hero"><h2>{tab} is coming soon</h2><p>The library comes first. This section will be added without unnecessary complexity.</p></div>}
    {journalBook&&journalDraft&&<div className="modalBackdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-label="Reading journal entry"><h2>{journalDraft.title}</h2><form onSubmit={saveJournal}>
