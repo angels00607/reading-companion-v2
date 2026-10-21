@@ -384,7 +384,18 @@ function App(){
  async function auth(mode){setBusy(true);setMessage('');const {error}=mode==='login'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password});setBusy(false);setMessage(error?error.message:mode==='signup'?'Account created. Check your email if confirmation is required.':'')}
  async function add(e){e.preventDefault();if(!title.trim())return;setBusy(true);const {error}=await supabase.from('rc_books').insert({title:title.trim(),author:author.trim(),user_id:session.user.id});setBusy(false);if(error)setMessage(error.message);else{setTitle('');setAuthor('');await load()}}
  async function change(book,status){
-  const {data,error}=await supabase.from('rc_books').update({status}).eq('id',book.id).eq('updated_at',book.updated_at).select('id')
+  if(book.status===status)return
+  const today=new Date().toLocaleDateString('en-CA')
+  const payload={status}
+  if(status==='reading'&&!book.started_on)payload.started_on=today
+  if(status==='finished'){
+   if(!book.started_on)payload.started_on=book.started_on||today
+   if(!book.finished_on)payload.finished_on=today
+  }else if(book.status==='finished'&&book.finished_on){
+   const confirmed=confirm('This book has a finish date. Keep the finish date when changing its status? Select Cancel to clear it.')
+   if(!confirmed)payload.finished_on=null
+  }
+  const {data,error}=await supabase.from('rc_books').update(payload).eq('id',book.id).eq('updated_at',book.updated_at).select('id')
   if(error)setMessage(error.message);else if(!data?.length)setMessage('This book changed on another device. Sync and try again.');await load()
  }
  function openEditor(book){setEditing(book.id);setDraft({...book})}
