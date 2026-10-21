@@ -200,6 +200,61 @@ function CalendarChallengeView({books,session,year,variant,challenge}){
   {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm prompt match"><h2>Confirm assignment</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><p>{prompts[pending.index-1]}</p><label className="checkLabel"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> I verified this match with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!confirmed||busy} onClick={assign}>Assign book</button></div></section></div>}
  </section>
 }
+function RouletteView({books,session,year}){
+ const [prompts,setPrompts]=useState([])
+ const [entries,setEntries]=useState([])
+ const [drafts,setDrafts]=useState({})
+ const [pending,setPending]=useState(null)
+ const [verified,setVerified]=useState(false)
+ const [error,setError]=useState('')
+ const [busy,setBusy]=useState(false)
+ async function refresh(){
+  const [p,e]=await Promise.all([
+   supabase.from('rc_roulette_prompts').select('id,position,label').eq('challenge_year',year).order('position'),
+   supabase.from('rc_roulette_entries').select('id,prompt_id,book_id,rc_roulette_prompts!inner(challenge_year)').eq('rc_roulette_prompts.challenge_year',year)
+  ])
+  if(p.error||e.error)setError(p.error?.message||e.error?.message)
+  else{setPrompts(p.data||[]);setEntries(e.data||[])}
+ }
+ useEffect(()=>{setPrompts([]);setEntries([]);setDrafts({});setPending(null);refresh()},[year,session.user.id])
+ async function savePrompt(position){
+  const label=(drafts[position]??'').trim()
+  if(!label)return
+  setBusy(true);setError('')
+  const existing=prompts.find(p=>p.position===position)
+  const {error}=existing?await supabase.from('rc_roulette_prompts').update({label}).eq('id',existing.id):await supabase.from('rc_roulette_prompts').insert({user_id:session.user.id,challenge_year:year,position,label})
+  if(error)setError(error.message);else setDrafts(d=>({...d,[position]:undefined}))
+  await refresh();setBusy(false)
+ }
+ async function assign(){
+  if(!pending||!verified)return
+  setBusy(true);setError('')
+  const {error}=await supabase.from('rc_roulette_entries').insert({user_id:session.user.id,prompt_id:pending.promptId,book_id:pending.bookId,verified_by_user:true})
+  if(error)setError(error.message);else{setPending(null);setVerified(false)}
+  await refresh();setBusy(false)
+ }
+ async function remove(id){setBusy(true);const {error}=await supabase.from('rc_roulette_entries').delete().eq('id',id);if(error)setError(error.message);await refresh();setBusy(false)}
+ const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!entries.some(e=>e.book_id===b.id))
+ return <section>
+  <h2>Reading Roulette · {year}</h2><p>{entries.length} / 10 prompts filled</p>
+  <p className="statsNote">Your ten prompts have not been provided yet. Enter their exact names below; no prompts are generated or guessed. One finished book per prompt, and each book can be used only once per year in Reading Roulette.</p>
+  {error&&<p className="message" role="alert">{error}</p>}
+  <div className="alphabetGrid">{Array.from({length:10},(_,i)=>i+1).map(position=>{
+   const prompt=prompts.find(p=>p.position===position)
+   const entry=prompt&&entries.find(e=>e.prompt_id===prompt.id)
+   const book=entry&&books.find(b=>b.id===entry.book_id)
+   const value=drafts[position]??prompt?.label??''
+   return <article key={position} className={entry?'filled':''}><strong>{position}</strong>
+    {entry?<><span>{prompt.label}</span><small>{book?.title||'Book unavailable'}</small><button className="subtle" disabled={busy} onClick={()=>remove(entry.id)}>Remove</button></>:<>
+     <input aria-label={'Roulette prompt '+position} placeholder="Exact prompt…" value={value} onChange={e=>setDrafts(d=>({...d,[position]:e.target.value}))}/>
+     {value.trim()&&value.trim()!==prompt?.label&&<button className="subtle" disabled={busy} onClick={()=>savePrompt(position)}>Save prompt</button>}
+     {prompt&&<select value="" aria-label={'Choose book for '+prompt.label} disabled={busy||!eligible.length} onChange={e=>{setPending({promptId:prompt.id,bookId:e.target.value});setVerified(false)}}><option value="">{eligible.length?'Choose book…':'No eligible books'}</option>{eligible.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
+    </>}
+   </article>
+  })}</div>
+  {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm roulette assignment"><h2>Confirm assignment</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified this book matches the prompt.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
+ </section>
+}
 const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 function ChallengesView({books,session}){
  const [year,setYear]=useState(new Date().getFullYear())
@@ -222,9 +277,9 @@ function ChallengesView({books,session}){
  const years=[...new Set([new Date().getFullYear(),...books.map(b=>Number(b.finished_on?.slice(0,4))).filter(y=>y>=2020&&y<=2100)])].sort((a,b)=>b-a)
  return <section className="challenges">
   <div className="hero"><h2>Reading challenges</h2><p>Track your prompts with verified books. Each book can fill only one Alphabet prompt per year.</p></div>
-  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button><button className={challengeTab==='tropes'?'active':''} onClick={()=>setChallengeTab('tropes')}>Tropes</button><button className={challengeTab==='archetypes'?'active':''} onClick={()=>setChallengeTab('archetypes')}>Archetypes</button><button className={challengeTab==='monthly'?'active':''} onClick={()=>setChallengeTab('monthly')}>Monthly</button><button className={challengeTab==='seasonal'?'active':''} onClick={()=>setChallengeTab('seasonal')}>Seasonal</button></div>
-  <div className="statsHeading"><h2>{({alphabet:'Alphabet Challenge',world:'Around the World',tropes:'Tropes Challenge',archetypes:'Archetypes Challenge',monthly:'Monthly Challenge',seasonal:'Seasonal Challenge'})[challengeTab]} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
-  {challengeTab==='monthly'||challengeTab==='seasonal'?<CalendarChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:challengeTab==='tropes'||challengeTab==='archetypes'?<PromptChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:<>
+  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button><button className={challengeTab==='tropes'?'active':''} onClick={()=>setChallengeTab('tropes')}>Tropes</button><button className={challengeTab==='archetypes'?'active':''} onClick={()=>setChallengeTab('archetypes')}>Archetypes</button><button className={challengeTab==='monthly'?'active':''} onClick={()=>setChallengeTab('monthly')}>Monthly</button><button className={challengeTab==='seasonal'?'active':''} onClick={()=>setChallengeTab('seasonal')}>Seasonal</button><button className={challengeTab==='roulette'?'active':''} onClick={()=>setChallengeTab('roulette')}>Reading Roulette</button></div>
+  <div className="statsHeading"><h2>{({alphabet:'Alphabet Challenge',world:'Around the World',tropes:'Tropes Challenge',archetypes:'Archetypes Challenge',monthly:'Monthly Challenge',seasonal:'Seasonal Challenge',roulette:'Reading Roulette'})[challengeTab]} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  {challengeTab==='roulette'?<RouletteView key={year} books={books} session={session} year={year}/>:challengeTab==='monthly'||challengeTab==='seasonal'?<CalendarChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:challengeTab==='tropes'||challengeTab==='archetypes'?<PromptChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:<>
   <p>{entries.length} / 26 letters filled · {26-entries.length} available</p>
   {error&&<p role="alert" className="message">{error}</p>}
   <div className="alphabetGrid">{alphabet.map(letter=>{
