@@ -108,3 +108,8 @@
 .statsMonthBar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:end;align-items:center;min-width:0;gap:5px}
 .statsMonthBar>span{width:min(28px,90%);min-height:3px;background:#8686b5;border-radius:6px 6px 0 0}
 .statsMonthBar small{font-size:.7rem}
+
+/* Explicit series volume classifications */
+.seriesCard .volumeKind{display:inline-block;margin-left:.45rem;padding:.15rem .48rem;border:1px solid currentColor;border-radius:999px;font-size:.72rem;font-weight:600;white-space:nowrap;vertical-align:middle;opacity:.88}
+.seriesCard .volumeKind-extra{border-style:dashed}
+.seriesCard .volumeKind-omnibus{border-style:double;border-width:3px}
