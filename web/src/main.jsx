@@ -345,6 +345,11 @@ function SeriesShelf({books,onEdit,onStart,onViewLibrary,session}){
   const ordered=[...group.items].sort((a,b)=>(a.series_number??Number.POSITIVE_INFINITY)-(b.series_number??Number.POSITIVE_INFINITY)||a.title.localeCompare(b.title))
   const unread=ordered.filter(b=>b.status==='to_read')
   const next=unread[0]
+  const nextNumber=next?.series_number==null?null:Number(next.series_number)
+  const earlierUnknown=nextNumber!=null&&ordered.some(b=>b.status==='to_read'&&b.series_number==null)
+  const earlierUnread=nextNumber!=null&&ordered.some(b=>b.status==='to_read'&&b.series_number!=null&&Number(b.series_number)<nextNumber)
+  const priorMissing=nextNumber!=null&&Number.isInteger(nextNumber)&&nextNumber>1&&Array.from({length:Math.min(nextNumber-1,500)},(_,i)=>i+1).some(n=>!ordered.some(b=>Number(b.series_number)===n))
+  const nextUncertain=nextNumber==null||earlierUnknown||earlierUnread||priorMissing
   const meta=metadata.find(m=>m.name.toLocaleLowerCase()===group.name.toLocaleLowerCase())
   const numbered=ordered.filter(b=>b.series_number!=null)
   const duplicates=[...new Set(numbered.filter((b,i)=>numbered.some((other,j)=>j!==i&&Number(other.series_number)===Number(b.series_number))).map(b=>Number(b.series_number)))]
@@ -363,7 +368,7 @@ function SeriesShelf({books,onEdit,onStart,onViewLibrary,session}){
    {meta?.status==='completed'&&<p className="seriesCaution">Publication complete (manually set) · {recordedComplete?'all numbered main volumes are recorded and marked finished':'your recorded reading may still be incomplete'}.</p>}
    {recordedComplete&&<p className="seriesCompletion">All stated numbered main volumes are recorded and marked finished. Extras are tracked separately.</p>}
    <button className="subtle" onClick={()=>onViewLibrary(group.name)}>Browse these books in Library</button><ol>{ordered.map(b=><li key={b.id}><span>{b.series_number!=null?'#'+b.series_number+' · ':''}{b.title}</span><small>{b.status==='finished'?'Finished':b.status==='reading'?'Reading':b.status==='dnf'?'DNF':'To Read'}</small><button className="subtle" onClick={()=>onEdit(b)}>Edit</button></li>)}</ol>
-   {next&&<div className="seriesNext"><span>Next recorded unread volume: <strong>{next.title}</strong></span><button onClick={()=>onStart(next)}>Start reading</button></div>}
+   {next&&<div className="seriesNext"><span>Next recorded unread volume: <strong>{next.title}</strong>{nextUncertain&&<small> · Check the volume order before starting.</small>}</span><button onClick={()=>onStart(next)}>Start reading</button></div>}
   </article>
  })}</div></section>
 }
