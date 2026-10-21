@@ -213,9 +213,10 @@ function RouletteView({books,session,year,variant}){
   const {data:p,error:pe}=await supabase.from('rc_roulette_prompts').select('id,position,label,explanation').eq('challenge_year',year).order('position')
   if(pe){setError(pe.message);return}
   let list=p||[]
-  const missing=catalog.flatMap(([label,explanation],i)=>list.some(x=>x.position===i+1)?[]:[{user_id:session.user.id,challenge_year:year,variant,position:i+1,label,explanation}])
-  if(missing.length){
-   const {error}=await supabase.from('rc_roulette_prompts').upsert(missing,{onConflict:'user_id,challenge_year,position',ignoreDuplicates:true})
+  const canonical=catalog.map(([label,explanation],i)=>({user_id:session.user.id,challenge_year:year,variant,position:i+1,label,explanation}))
+  const needsSync=canonical.some(item=>{const existing=list.find(x=>x.position===item.position);return !existing||existing.label!==item.label||existing.explanation!==item.explanation})
+  if(needsSync){
+   const {error}=await supabase.from('rc_roulette_prompts').upsert(canonical,{onConflict:'user_id,challenge_year,position'})
    if(error){setError(error.message);return}
    const latest=await supabase.from('rc_roulette_prompts').select('id,position,label,explanation').eq('challenge_year',year).order('position')
    if(latest.error){setError(latest.error.message);return}
@@ -280,7 +281,7 @@ function ChallengesView({books,session}){
  }
  const years=[...new Set([new Date().getFullYear(),...books.map(b=>Number(b.finished_on?.slice(0,4))).filter(y=>y>=2020&&y<=2100)])].sort((a,b)=>b-a)
  return <section className="challenges">
-  <div className="hero"><h2>Reading challenges</h2><p>Track your prompts with verified books. Each book can fill only one Alphabet prompt per year.</p></div>
+  <div className="hero"><h2>Reading challenges</h2><p>Seven challenges, one reading year. Choose a challenge to view its prompts and record your books.</p></div>
   <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button><button className={challengeTab==='tropes'?'active':''} onClick={()=>setChallengeTab('tropes')}>Tropes</button><button className={challengeTab==='archetypes'?'active':''} onClick={()=>setChallengeTab('archetypes')}>Archetypes</button><button className={challengeTab==='monthly'?'active':''} onClick={()=>setChallengeTab('monthly')}>Monthly</button><button className={challengeTab==='seasonal'?'active':''} onClick={()=>setChallengeTab('seasonal')}>Seasonal</button><button className={challengeTab==='roulette'?'active':''} onClick={()=>setChallengeTab('roulette')}>Reading Roulette</button></div>
   <div className="statsHeading"><h2>{({alphabet:'Alphabet Challenge',world:'Around the World',tropes:'Tropes Challenge',archetypes:'Archetypes Challenge',monthly:'Monthly Challenge',seasonal:'Seasonal Challenge',roulette:'Reading Roulette'})[challengeTab]} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
   {challengeTab==='roulette'?<RouletteView key={year} books={books} session={session} year={year} variant={variant}/>:challengeTab==='monthly'||challengeTab==='seasonal'?<CalendarChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:challengeTab==='tropes'||challengeTab==='archetypes'?<PromptChallengeView key={challengeTab+year} books={books} session={session} year={year} variant={variant} challenge={challengeTab}/>:<>
