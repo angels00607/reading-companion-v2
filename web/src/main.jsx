@@ -1,4 +1,4 @@
-import React, {useEffect,useState} from 'react'
+import React, {useEffect,useRef,useState} from 'react'
 import {createRoot} from 'react-dom/client'
 import {supabase} from './supabase'
 import './style.css'
@@ -395,26 +395,30 @@ function SeriesShelf({books,onEdit,onStart,onViewLibrary,session}){
 function BookCatalogSearch({books,onAdd,busy}){
  const [term,setTerm]=useState(''),[mode,setMode]=useState('all'),[results,setResults]=useState([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[searched,setSearched]=useState(false),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false)
  const [selected,setSelected]=useState(null)
+ const requestRef=useRef(0)
+ const [language,setLanguage]=useState('all')
  async function search(e,offset=0){
   if(e?.preventDefault)e.preventDefault()
   const q=term.trim();if(q.length<2)return
+  const requestId=++requestRef.current
   setLoading(true);setError('')
   if(offset===0){setSearched(false);setResults([]);setPage(0);setSelected(null)}
   try{
    const normalized=q.replace(/[^0-9Xx]/g,'')
    const isbn=/^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$/.test(normalized)?normalized:null
    const query=isbn?'isbn:'+isbn:mode==='title'?'intitle:'+q:mode==='author'?'inauthor:'+q:q
-   const response=await fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(query)+'&startIndex='+offset+'&maxResults=20&printType=books')
+   const response=await fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(query)+'&startIndex='+offset+'&maxResults=20&printType=books'+(language!=='all'?'&langRestrict='+language:''))
    if(!response.ok)throw new Error('Book catalog temporarily unavailable ('+response.status+').')
    const data=await response.json()
+   if(requestId!==requestRef.current)return
    const items=(data.items||[]).filter(x=>x.volumeInfo?.title).map(x=>({id:x.id,title:x.volumeInfo.title,author:(x.volumeInfo.authors||[]).join(', '),pages:x.volumeInfo.pageCount||null,cover:x.volumeInfo.imageLinks?.thumbnail?.replace('http:','https:')||null,published:x.volumeInfo.publishedDate||'',publisher:x.volumeInfo.publisher||'',language:x.volumeInfo.language||'',isbn:(x.volumeInfo.industryIdentifiers||[]).find(v=>v.type==='ISBN_13')?.identifier||'',description:x.volumeInfo.description||''}))
    setResults(previous=>offset===0?items:[...previous,...items.filter(x=>!previous.some(p=>p.id===x.id))])
    setPage(offset);setHasMore((data.items||[]).length===20&&offset+20<(data.totalItems||0)&&offset+20<200)
    setSearched(true)
-  }catch(err){setError(err.message||'Search failed. Please try again.')}finally{setLoading(false)}
+  }catch(err){if(requestId===requestRef.current)setError(err.message||'Search failed. Please try again.')}finally{if(requestId===requestRef.current)setLoading(false)}
  }
  const exists=b=>books.some(x=>x.title.trim().toLocaleLowerCase()===b.title.trim().toLocaleLowerCase()&&x.author.trim().toLocaleLowerCase()===b.author.trim().toLocaleLowerCase())
- return <section className="catalogSearch"><h2>Find a book</h2><p>Search Google Books by title, author or ISBN. Check the edition before adding it to your library.</p><form onSubmit={e=>search(e,0)} className="catalogSearchForm"><input aria-label="Search book catalog" placeholder="Title, author or ISBN" value={term} onChange={e=>setTerm(e.target.value)} minLength="2" required/><select aria-label="Search by" value={mode} onChange={e=>setMode(e.target.value)}><option value="all">All fields</option><option value="title">Title</option><option value="author">Author</option></select><button disabled={loading}>{loading?'Searching…':'Search books'}</button></form>{error&&<p role="alert">{error}</p>}{searched&&!results.length&&<p>No results found. You can add the book manually below.</p>}{results.length>0&&<p>{results.length} results loaded · Editions may differ in page count, language and publication date.</p>}<div className="catalogResults">{results.map(b=><article className="catalogResult" key={b.id}>{b.cover&&<img src={b.cover} alt="" loading="lazy" referrerPolicy="no-referrer"/>}<div><strong>{b.title}</strong><p>{b.author||'Author not listed'}</p><small>{[b.published,b.publisher,b.language?.toUpperCase(),b.pages?b.pages+' pages':null,b.isbn?'ISBN '+b.isbn:null].filter(Boolean).join(' · ')}</small><p><button type="button" className="subtle" onClick={()=>setSelected(selected?.id===b.id?null:b)} aria-expanded={selected?.id===b.id}> {selected?.id===b.id?'Hide details':'View details'}</button></p>{selected?.id===b.id&&<div className="catalogDetails"><p>{b.description?b.description.replace(/<[^>]*>/g,' ').slice(0,1800):'No description provided by the catalog.'}</p><small>Catalog information may be incomplete. Format and series position are not inferred automatically.</small></div>}</div><button type="button" disabled={busy||exists(b)} onClick={()=>onAdd(b)}>{exists(b)?'In library':'Add to library'}</button></article>)}</div>{hasMore&&<button type="button" className="secondary" disabled={loading} onClick={()=>search(null,page+20)}>{loading?'Loading…':'Load more books'}</button>}</section>
+ return <section className="catalogSearch"><h2>Find a book</h2><p>Search Google Books by title, author or ISBN. Check the edition before adding it to your library.</p><form onSubmit={e=>search(e,0)} className="catalogSearchForm"><input aria-label="Search book catalog" placeholder="Title, author or ISBN" value={term} onChange={e=>setTerm(e.target.value)} minLength="2" required/><select aria-label="Search by" value={mode} onChange={e=>setMode(e.target.value)}><option value="all">All fields</option><option value="title">Title</option><option value="author">Author</option></select><select aria-label="Catalog language" value={language} onChange={e=>setLanguage(e.target.value)}><option value="all">All languages</option><option value="en">English</option><option value="fr">French</option></select><button disabled={loading}>{loading?'Searching…':'Search books'}</button></form>{error&&<p role="alert">{error}</p>}{searched&&!results.length&&<p>No results found. You can add the book manually below.</p>}{results.length>0&&<p>{results.length} results loaded · Editions may differ in page count, language and publication date.</p>}<div className="catalogResults">{results.map(b=><article className="catalogResult" key={b.id}>{b.cover&&<img src={b.cover} alt="" loading="lazy" referrerPolicy="no-referrer"/>}<div><strong>{b.title}</strong><p>{b.author||'Author not listed'}</p><small>{[b.published,b.publisher,b.language?.toUpperCase(),b.pages?b.pages+' pages':null,b.isbn?'ISBN '+b.isbn:null].filter(Boolean).join(' · ')}</small><p><button type="button" className="subtle" onClick={()=>setSelected(selected?.id===b.id?null:b)} aria-expanded={selected?.id===b.id}> {selected?.id===b.id?'Hide details':'View details'}</button></p>{selected?.id===b.id&&<div className="catalogDetails"><p>{b.description?b.description.replace(/<[^>]*>/g,' ').slice(0,1800):'No description provided by the catalog.'}</p><small>Catalog information may be incomplete. Format and series position are not inferred automatically.</small></div>}</div><button type="button" disabled={busy||exists(b)} onClick={()=>onAdd(b)}>{exists(b)?'In library':'Add to library'}</button></article>)}</div>{hasMore&&<button type="button" className="secondary" disabled={loading} onClick={()=>search(null,page+20)}>{loading?'Loading…':'Load more books'}</button>}</section>
 }
 function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
