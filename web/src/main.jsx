@@ -417,7 +417,7 @@ function parseStoryGraphCSV(source){
  return rows.map((r,index)=>{
   const title=find(r,'Title'),author=find(r,'Authors','Author')
   const statusRaw=find(r,'Read Status','Status').trim().toLowerCase()
-  const status=statusRaw.includes('did not finish')||statusRaw==='dnf'?'dnf':statusRaw.includes('currently reading')||statusRaw==='reading'?'reading':statusRaw==='read'||statusRaw==='finished'?'finished':statusRaw==='to-read'||statusRaw==='to read'||statusRaw==='to_read'?'to_read':null
+  const status=statusRaw.includes('did not finish')||statusRaw==='dnf'?'dnf':statusRaw.includes('currently reading')||statusRaw==='reading'?'reading':statusRaw==='read'||statusRaw==='finished'?'finished':statusRaw==='to-read'||statusRaw==='to read'||statusRaw==='to_read'||statusRaw==='to-read shelf'?'to_read':null
   const pagesRaw=find(r,'Number of Pages','Pages','Page Count')
   const pages=/^\d+$/.test(pagesRaw)&&Number(pagesRaw)>0&&Number(pagesRaw)<=100000?Number(pagesRaw):null
   const dateRaw=find(r,'Date Read','Date Finished','Finished Date')
