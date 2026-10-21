@@ -224,12 +224,12 @@ function RouletteView({books,session,year,variant}){
  const seriesGroups=Object.values(books.filter(b=>b.series_name?.trim()).reduce((acc,b)=>{const key=b.series_name.trim().toLocaleLowerCase();if(!acc[key])acc[key]=[];acc[key].push(b);return acc},{}))
  const seriesCandidates=seriesGroups.flatMap(group=>{
   if(!group.some(b=>['finished','reading'].includes(b.status)))return []
-  const unread=group.filter(b=>b.status==='to_read'&&b.series_number!=null).sort((a,b)=>Number(a.series_number)-Number(b.series_number))
+  const unread=group.filter(b=>b.status==='to_read'&&b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number!=null&&Number.isInteger(Number(b.series_number))&&Number(b.series_number)>=1).sort((a,b)=>Number(a.series_number)-Number(b.series_number))
   if(!unread.length)return []
   const next=unread[0]
-  const previous=group.filter(b=>['finished','reading'].includes(b.status)&&b.series_number!=null)
+  const previous=group.filter(b=>['finished','reading'].includes(b.status)&&b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number!=null)
   if(!previous.length||!previous.some(b=>Number(b.series_number)<Number(next.series_number)))return []
-  const priorUnread=group.some(b=>b.status==='to_read'&&b.series_number!=null&&Number(b.series_number)<Number(next.series_number))
+  const priorUnread=group.some(b=>b.status==='to_read'&&b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number!=null&&Number(b.series_number)<Number(next.series_number))
   if(priorUnread)return []
   return [{name:next.series_name,book:next}]
  })
@@ -354,17 +354,17 @@ function SeriesShelf({books,onEdit,onStart,onViewLibrary,session}){
  return <section className="seriesShelf"><div className="hero"><h2>Your series</h2><p>{groups.length} series in your library. Volumes are ordered by number when known; missing volumes are not invented.</p></div>
  <div className="seriesToolbar"><label>Find a series<input value={seriesQuery} onChange={e=>setSeriesQuery(e.target.value)} placeholder="Search series…" /></label><label>Publication status<select value={seriesFilter} onChange={e=>setSeriesFilter(e.target.value)}><option value="all">All series</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="abandoned">Abandoned</option></select></label><label>Sort by<select value={seriesSort} onChange={e=>setSeriesSort(e.target.value)}><option value="name">Name A–Z</option><option value="unread">Most unread</option><option value="finished">Most finished</option></select></label><label className="seriesWarningToggle"><input type="checkbox" checked={showSeriesWarningsOnly} onChange={e=>setShowSeriesWarningsOnly(e.target.checked)}/>Needs review only</label><span>{visibleGroups.length} / {groups.length} series</span></div>{!visibleGroups.length&&<p>No series match your filters.</p>}<div className="seriesGrid">{visibleGroups.map(group=>{
   const ordered=[...group.items].sort((a,b)=>(a.series_number??Number.POSITIVE_INFINITY)-(b.series_number??Number.POSITIVE_INFINITY)||a.title.localeCompare(b.title))
-  const unread=ordered.filter(b=>b.status==='to_read')
+  const unread=ordered.filter(b=>b.status==='to_read'&&b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus')
   const next=unread[0]
   const nextNumber=next?.series_number==null?null:Number(next.series_number)
-  const earlierUnknown=nextNumber!=null&&ordered.some(b=>b.status==='to_read'&&b.series_number==null)
-  const earlierUnread=nextNumber!=null&&ordered.some(b=>b.status==='to_read'&&b.series_number!=null&&Number(b.series_number)<nextNumber)
-  const priorMissing=nextNumber!=null&&Number.isInteger(nextNumber)&&nextNumber>1&&Array.from({length:Math.min(nextNumber-1,500)},(_,i)=>i+1).some(n=>!ordered.some(b=>Number(b.series_number)===n))
+  const earlierUnknown=nextNumber!=null&&ordered.some(b=>b.status==='to_read'&&b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number==null)
+  const earlierUnread=nextNumber!=null&&ordered.some(b=>b.status==='to_read'&&b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number!=null&&Number(b.series_number)<nextNumber)
+  const priorMissing=nextNumber!=null&&Number.isInteger(nextNumber)&&nextNumber>1&&Array.from({length:Math.min(nextNumber-1,500)},(_,i)=>i+1).some(n=>!ordered.some(b=>b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&Number(b.series_number)===n))
   const nextUncertain=nextNumber==null||earlierUnknown||earlierUnread||priorMissing
   const meta=metadata.find(m=>m.name.toLocaleLowerCase()===group.name.toLocaleLowerCase())
   const numbered=ordered.filter(b=>b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number!=null)
   const duplicates=[...new Set(numbered.filter((b,i)=>numbered.some((other,j)=>j!==i&&Number(other.series_number)===Number(b.series_number))).map(b=>Number(b.series_number)))]
-  const mainVolumes=new Set(numbered.filter(b=>Number.isInteger(Number(b.series_number))&&Number(b.series_number)>=1)).map(b=>Number(b.series_number)))
+  const mainVolumes=new Set(numbered.filter(b=>Number.isInteger(Number(b.series_number))&&Number(b.series_number)>=1).map(b=>Number(b.series_number)))
   const missing=meta?.total_volumes!=null&&meta.total_volumes<=500?Array.from({length:meta.total_volumes},(_,i)=>i+1).filter(n=>!mainVolumes.has(n)):[]
   const mainBooks=numbered.filter(b=>Number.isInteger(Number(b.series_number))&&Number(b.series_number)>=1&&Number(b.series_number)<=(meta?.total_volumes??0))
   const finishedMainNumbers=new Set(mainBooks.filter(b=>b.status==='finished').map(b=>Number(b.series_number)))
@@ -419,7 +419,7 @@ function App(){
  }
  function openEditor(book){setEditing(book.id);setDraft({...book})}
  function viewSeriesInLibrary(name){setTab('Library');setLibraryStatus('all');setQuery(name)}
- function safeSeriesCandidate(book){if(!book.series_name?.trim())return true;const members=books.filter(b=>b.series_name?.trim().toLocaleLowerCase()===book.series_name.trim().toLocaleLowerCase());const number=Number(book.series_number);if(book.series_number==null||!Number.isInteger(number)||number<1)return false;const prior=members.filter(b=>b.series_number!=null&&Number.isInteger(Number(b.series_number))&&Number(b.series_number)<number);if(prior.some(b=>b.status!=='finished'))return false;return Array.from({length:number-1},(_,i)=>i+1).every(n=>prior.some(b=>Number(b.series_number)===n))}
+ function safeSeriesCandidate(book){if(!book.series_name?.trim())return true;if(book.series_volume_kind==='extra'||book.series_volume_kind==='omnibus')return false;const members=books.filter(b=>b.series_name?.trim().toLocaleLowerCase()===book.series_name.trim().toLocaleLowerCase());const number=Number(book.series_number);if(book.series_number==null||!Number.isInteger(number)||number<1)return false;const prior=members.filter(b=>b.series_volume_kind!=='extra'&&b.series_volume_kind!=='omnibus'&&b.series_number!=null&&Number.isInteger(Number(b.series_number))&&Number(b.series_number)<number);if(prior.some(b=>b.status!=='finished'))return false;return Array.from({length:number-1},(_,i)=>i+1).every(n=>prior.some(b=>Number(b.series_number)===n))}
  const tbrEligible=books.filter(b=>b.status==='to_read'&&(tbrMode!=='standalone'||!b.series_name?.trim())&&(tbrMode!=='series'||b.series_name?.trim())&&(tbrMaxPages===''||(b.page_count!=null&&Number(b.page_count)<=Number(tbrMaxPages)))&&(tbrMinPages===''||(b.page_count!=null&&Number(b.page_count)>=Number(tbrMinPages)))&&(tbrAuthor===''||(b.author||'').toLocaleLowerCase().includes(tbrAuthor.trim().toLocaleLowerCase()))&&(tbrFormat==='all'||b.book_format===tbrFormat)&&(!tbrSeriesSafe||safeSeriesCandidate(b)))
  async function saveBook(e){
   e.preventDefault()
