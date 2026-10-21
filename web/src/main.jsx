@@ -40,9 +40,46 @@ function StatisticsView({books}){
   <div className="cards">{yearly.slice().sort((a,b)=>b.finished_on.localeCompare(a.finished_on)).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.finished_on} · {b.author||'Unknown author'}</p></article>)}{!yearly.length&&<p>No dated finished books for this year.</p>}</div>
  </section>
 }
+const worldCities={
+ A:{easy:['New York City','London','Boston','Chicago','Los Angeles','Paris','Seattle','San Francisco','Toronto','Washington, D.C.'],challenge:['Rome','Dublin','Barcelona','Sydney','Tokyo','Amsterdam','Florence','Lisbon','Vancouver','Edinburgh']},
+ B:{easy:['New York City','London','Philadelphia','Miami','Nashville','New Orleans','Montreal','Oxford','Milan','Madrid'],challenge:['Prague','Vienna','Copenhagen','Athens','Seoul','Singapore','Istanbul','Melbourne','Berlin','Porto']}
+}
+function AroundWorldView({books,session,year,variant}){
+ const [entries,setEntries]=useState([])
+ const [error,setError]=useState('')
+ const [pending,setPending]=useState(null)
+ const [verified,setVerified]=useState(false)
+ const [busy,setBusy]=useState(false)
+ useEffect(()=>{let active=true;setEntries([]);setPending(null);setVerified(false);supabase.from('rc_world_entries').select('id,city,book_id').eq('challenge_year',year).then(({data,error})=>{if(active){if(error)setError(error.message);else{setEntries(data||[]);setError('')}}});return()=>{active=false}},[year,session.user.id])
+ const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!entries.some(e=>e.book_id===b.id))
+ async function refresh(){const {data,error}=await supabase.from('rc_world_entries').select('id,city,book_id').eq('challenge_year',year);if(error)setError(error.message);else setEntries(data||[])}
+ async function assign(){
+  if(!pending||!verified)return
+  setBusy(true);setError('')
+  const {error}=await supabase.from('rc_world_entries').insert({user_id:session.user.id,challenge_year:year,city:pending.city,book_id:pending.bookId,verified_by_user:true})
+  if(error)setError(error.message);else{setPending(null);setVerified(false)}
+  await refresh();setBusy(false)
+ }
+ async function remove(entry){setBusy(true);const {error}=await supabase.from('rc_world_entries').delete().eq('id',entry.id);if(error)setError(error.message);await refresh();setBusy(false)}
+ const groups=worldCities[variant]
+ return <section>
+  <h2>Around the World · Version {variant}</h2><p>{entries.length} / 20 cities filled</p>
+  <p className="statsNote">Choose a book only when you have checked that the story is substantially set in that city (at least 70% confidence). The app does not infer locations from titles.</p>
+  {error&&<p role="alert" className="message">{error}</p>}
+  {Object.entries(groups).map(([group,cities])=><div key={group}><h3>{group==='easy'?'Easy cities':'Challenge cities'}</h3><div className="alphabetGrid">{cities.map(city=>{
+   const entry=entries.find(e=>e.city===city)
+   const book=entry&&books.find(b=>b.id===entry.book_id)
+   return <article key={city} className={entry?'filled':''}><strong className="cityTitle">{city}</strong><span>{book?book.title:'Available'}</span>
+   {entry?<button className="subtle" disabled={busy} onClick={()=>remove(entry)}>Remove</button>:<select value="" disabled={busy||!eligible.length} aria-label={'Choose a book for '+city} onChange={e=>{setPending({city,bookId:e.target.value});setVerified(false)}}><option value="">{eligible.length?'Choose book…':'No eligible books'}</option>{eligible.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
+   </article>
+  })}</div></div>)}
+  {pending&&<div className="modalBackdrop"><section className="editor" role="dialog" aria-modal="true" aria-label="Confirm city match"><h2>Confirm {pending.city}</h2><p>{books.find(b=>b.id===pending.bookId)?.title}</p><label className="checkLabel"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/> I verified that this book matches the city with at least 70% confidence.</label><div className="editorActions"><button className="secondary" onClick={()=>setPending(null)}>Cancel</button><button disabled={!verified||busy} onClick={assign}>Assign book</button></div></section></div>}
+ </section>
+}
 const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 function ChallengesView({books,session}){
  const [year,setYear]=useState(new Date().getFullYear())
+ const [challengeTab,setChallengeTab]=useState('alphabet')
  const [entries,setEntries]=useState([])
  const [error,setError]=useState('')
  const [working,setWorking]=useState(false)
@@ -61,7 +98,9 @@ function ChallengesView({books,session}){
  const years=[...new Set([new Date().getFullYear(),...books.map(b=>Number(b.finished_on?.slice(0,4))).filter(y=>y>=2020&&y<=2100)])].sort((a,b)=>b-a)
  return <section className="challenges">
   <div className="hero"><h2>Reading challenges</h2><p>Track your prompts with verified books. Each book can fill only one Alphabet prompt per year.</p></div>
-  <div className="statsHeading"><h2>Alphabet Challenge · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  <div className="challengeSwitch"><button className={challengeTab==='alphabet'?'active':''} onClick={()=>setChallengeTab('alphabet')}>Alphabet</button><button className={challengeTab==='world'?'active':''} onClick={()=>setChallengeTab('world')}>Around the World</button></div>
+  <div className="statsHeading"><h2>{challengeTab==='alphabet'?'Alphabet Challenge':'Around the World'} · Version {variant}</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  {challengeTab==='world'?<AroundWorldView books={books} session={session} year={year} variant={variant}/>:<>
   <p>{entries.length} / 26 letters filled · {26-entries.length} available</p>
   {error&&<p role="alert" className="message">{error}</p>}
   <div className="alphabetGrid">{alphabet.map(letter=>{
@@ -72,7 +111,7 @@ function ChallengesView({books,session}){
     {assigned?<button className="subtle" disabled={working} onClick={()=>assign(letter,null)}>Remove</button>:<select aria-label={'Assign a book to letter '+letter} disabled={working||!choices.length} value="" onChange={e=>assign(letter,e.target.value)}><option value="">{choices.length?'Choose book…':'No eligible books'}</option>{choices.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
    </article>
   })}</div>
-  <p className="statsNote">Eligible books must be marked Finished, have a finish date in the selected year, and begin with the selected letter. Other challenges will be added using your exact prompt lists.</p>
+  <p className="statsNote">Eligible books must be marked Finished, have a finish date in the selected year, and begin with the selected letter. Other challenges will be added using your exact prompt lists.</p></>}
  </section>
 }
 function App(){
