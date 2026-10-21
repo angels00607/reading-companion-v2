@@ -1,0 +1,30 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+  AA0000000000000000000001 = {isa = PBXBuildFile; fileRef = BB0000000000000000000001; };
+  AA0000000000000000000002 = {isa = PBXBuildFile; fileRef = BB0000000000000000000002; };
+  AA0000000000000000000003 = {isa = PBXBuildFile; fileRef = BB0000000000000000000003; };
+  BB0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingCompanionApp.swift; sourceTree = "<group>"; };
+  BB0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+  BB0000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingTheme.swift; sourceTree = "<group>"; };
+  CC0000000000000000000001 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadingCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+  DD0000000000000000000001 = {isa = PBXGroup; children = (DD0000000000000000000002, DD0000000000000000000003,); sourceTree = "<group>"; };
+  DD0000000000000000000002 = {isa = PBXGroup; path = ReadingCompanion; sourceTree = "<group>"; children = (BB0000000000000000000001,BB0000000000000000000002,BB0000000000000000000003); };
+  DD0000000000000000000003 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (CC0000000000000000000001,); };
+  EE0000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001,AA0000000000000000000002,AA0000000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
+  EE0000000000000000000002 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  EE0000000000000000000003 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  FF0000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = FF0000000000000000000003; buildPhases = (EE0000000000000000000001, EE0000000000000000000002, EE0000000000000000000003,); buildRules = (); dependencies = (); name = ReadingCompanion; productName = ReadingCompanion; productReference = CC0000000000000000000001; productType = "com.apple.product-type.application"; };
+  FF0000000000000000000002 = {isa = PBXProject; attributes = { LastUpgradeCheck = 1600; TargetAttributes = { FF0000000000000000000001 = { CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = FF0000000000000000000004; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = DD0000000000000000000001; productRefGroup = DD0000000000000000000003; projectDirPath = ""; projectRoot = ""; targets = (FF0000000000000000000001,); };
+  FF0000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.readingcompanion.app; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = auto; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+  FF0000000000000000000021 = {isa = XCBuildConfiguration; buildSettings = {SDKROOT = auto; SWIFT_VERSION = 5.0; }; name = Debug; };
+  FF0000000000000000000012 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.readingcompanion.app; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = auto; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+  FF0000000000000000000022 = {isa = XCBuildConfiguration; buildSettings = {SDKROOT = auto; SWIFT_VERSION = 5.0; }; name = Release; };
+  FF0000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (FF0000000000000000000011,FF0000000000000000000012,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+  FF0000000000000000000004 = {isa = XCConfigurationList; buildConfigurations = (FF0000000000000000000021,FF0000000000000000000022,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+ };
+ rootObject = FF0000000000000000000002;
+}
