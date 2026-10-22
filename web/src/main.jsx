@@ -434,7 +434,7 @@ function parseStoryGraphCSV(source){
    const started=normalizeDate(match[1]),finished=normalizeDate(match[2]||match[1])
    return validDate(started)&&validDate(finished)&&started<=finished?{started_on:started,finished_on:finished}:null
   })
-  const completeSessions=sessions.filter(Boolean)
+  const completeSessions=sessions.filter(Boolean).filter((s,index,array)=>array.findIndex(other=>other.started_on===s.started_on&&other.finished_on===s.finished_on)===index)
   if(status==='finished'&&finishedOn&&!completeSessions.some(s=>s.finished_on===finishedOn))completeSessions.push({started_on:null,finished_on:finishedOn})
   const ratingRaw=find(r,'Star Rating','Rating')
   const rating=ratingRaw!==''&&Number.isInteger(Number(ratingRaw))&&Number(ratingRaw)>=1&&Number(ratingRaw)<=5?Number(ratingRaw):null
@@ -444,6 +444,7 @@ function parseStoryGraphCSV(source){
   if(dateRaw&&!finishedOn)warnings.push('Invalid finish date')
   if(status==='finished'&&!dateRaw)warnings.push('Missing finish date (needed for yearly statistics)')
   if(status==='finished'&&sessions.some(s=>!s))warnings.push('Unrecognized reading session dates')
+  if(status==='finished'&&completeSessions.length<sessions.filter(Boolean).length)warnings.push('Duplicate reading sessions in CSV: review before import')
   if(status==='finished'&&readCount!==null&&readCount>completeSessions.length)warnings.push('Some reading sessions have no dates')
   if(ratingRaw&&rating===null)warnings.push('Rating not a whole star (1–5)')
   if(pagesRaw&&!pages)warnings.push('Invalid page count')
@@ -481,6 +482,7 @@ function StoryGraphImport({books,onImport,busy}){
    if(next.raw_date&&!validDate(next.raw_date))warnings.push('Invalid finish date')
    if(next.status==='finished'&&!next.raw_date)warnings.push('Missing finish date (needed for yearly statistics)')
    if(next.status==='finished'&&next.read_count>1&&next.read_count>(next.sessions||[]).length&&!next.reviewsRereads)warnings.push('Some reading sessions have no dates')
+   if(next.status==='finished'&&next.dates_read){const rawParts=next.dates_read.split(',').map(s=>s.trim()).filter(Boolean);if(rawParts.length>(next.sessions||[]).length&&!next.reviewsRereads)warnings.push('Reading session dates need review')}
    if(next.raw_rating!==''&&(next.rating===null||!Number.isInteger(next.rating)||next.rating<1||next.rating>5))warnings.push('Rating not a whole star (1–5)')
    next.finished_on=next.status==='finished'&&validDate(next.raw_date)?next.raw_date:null
    next.rating=next.status==='finished'&&next.raw_rating!==''&&Number.isInteger(Number(next.raw_rating))&&Number(next.raw_rating)>=1&&Number(next.raw_rating)<=5?Number(next.raw_rating):null
