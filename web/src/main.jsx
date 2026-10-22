@@ -27,7 +27,22 @@ function ReleaseReminder({books,userId,onSave}){
  const [installHint,setInstallHint]=useState(false)
  const [pushStatus,setPushStatus]=useState('')
  const [pushBusy,setPushBusy]=useState(false)
+ const [deviceRegistered,setDeviceRegistered]=useState(false)
  const vapidKey=import.meta.env.VITE_VAPID_PUBLIC_KEY||''
+ useEffect(()=>{
+  let cancelled=false
+  if(!userId||!('serviceWorker' in navigator)||!('PushManager' in window))return
+  ;(async()=>{
+   try{
+    const registration=await navigator.serviceWorker.ready
+    const subscription=await registration.pushManager.getSubscription()
+    if(!subscription){if(!cancelled)setDeviceRegistered(false);return}
+    const {data,error}=await supabase.from('rc_push_subscriptions').select('id').eq('user_id',userId).eq('endpoint',subscription.endpoint).limit(1)
+    if(!cancelled&&!error)setDeviceRegistered(!!data?.length)
+   }catch{if(!cancelled)setDeviceRegistered(false)}
+  })()
+  return()=>{cancelled=true}
+ },[userId,workerReady])
  useEffect(()=>{if(!('serviceWorker' in navigator))return;const scope=import.meta.env.BASE_URL;navigator.serviceWorker.register(scope+'sw.js',{scope}).then(()=>setWorkerReady(true)).catch(()=>setWorkerReady(false));setInstallHint(/iPhone|iPad|iPod/.test(navigator.userAgent)&&!window.matchMedia('(display-mode: standalone)').matches)},[])
  useEffect(()=>{const timer=window.setInterval(()=>setDayTick(v=>v+1),60000);return()=>window.clearInterval(timer)},[])
  const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
@@ -38,14 +53,16 @@ function ReleaseReminder({books,userId,onSave}){
   if(!userId||!enabled||!subscribed||typeof Notification==='undefined'||Notification.permission!=='granted')return
   const todayLocal=today()
   const due=tracked.filter(b=>b.release_on===todayLocal)
-  for(const b of due){
+  ;(async()=>{for(const b of due){
    const key='rc-release-alert:'+userId+':'+b.id+':'+todayLocal
    try{
     if(localStorage.getItem(key))continue
-    new Notification('Book release today',{body:b.title+(b.author?' — '+b.author:''),tag:key})
+    const registration=await navigator.serviceWorker?.ready
+    if(registration?.showNotification){await registration.showNotification('Book release today',{body:b.title+(b.author?' — '+b.author:''),tag:key,icon:import.meta.env.BASE_URL+'icon.svg'})}
+    else new Notification('Book release today',{body:b.title+(b.author?' — '+b.author:''),tag:key})
     localStorage.setItem(key,'shown')
    }catch(err){setNotice('This browser cannot display a notification: '+(err.message||'unknown error'));break}
-  }
+  }})()
  },[books,userId,enabled,subscribed,dayTick])
  async function enable(){
   if(typeof Notification==='undefined'){setNotice('This browser does not support notifications.');return}
@@ -66,7 +83,8 @@ function ReleaseReminder({books,userId,onSave}){
    const payload=serializePushSubscription(subscription,userId)
    const {error}=await supabase.from('rc_push_subscriptions').upsert(payload,{onConflict:'user_id,endpoint'})
    if(error)throw error
-   setPushStatus('Device registered for Web Push. Scheduled delivery is not enabled yet.')
+   setDeviceRegistered(true)
+   setPushStatus('This device is registered. Delivery depends on the server configuration and a verified test.')
   }catch(err){setPushStatus('Could not register this device: '+(err.message||'unknown error'))}
   finally{setPushBusy(false)}
  }
@@ -75,11 +93,12 @@ function ReleaseReminder({books,userId,onSave}){
   try{
    const registration=await navigator.serviceWorker.ready
    const subscription=await registration.pushManager.getSubscription()
-   if(!subscription){setPushStatus('No push subscription on this device.');return}
+   if(!subscription){setDeviceRegistered(false);setPushStatus('No push subscription on this device.');return}
    const endpoint=subscription.endpoint
    const {error}=await supabase.from('rc_push_subscriptions').delete().eq('user_id',userId).eq('endpoint',endpoint)
    if(error)throw error
    const removed=await subscription.unsubscribe()
+   setDeviceRegistered(false)
    setPushStatus(removed?'This device was unsubscribed.':'Server record removed; browser unsubscribe could not be confirmed.')
   }catch(err){setPushStatus('Could not unsubscribe: '+(err.message||'unknown error'))}
   finally{setPushBusy(false)}
@@ -97,7 +116,7 @@ function ReleaseReminder({books,userId,onSave}){
   if(success){setEditing('');setDate('')}
  }
  return <section className="releaseReminder"><h3>Book release reminders</h3><p>Enter a confirmed release date for a book in your To Read list. Dates are saved to your account. On the release day, this browser can notify you when Reading Companion is open. This is not background push and release dates are not fetched automatically.</p>
-  {installHint&&<p className="statsNote">On iPhone: Safari → Share → Add to Home Screen. iOS Web Push requires the installed app and notification permission.</p>}{workerReady&&<p className="statsNote">Service worker ready. Web Push requires a configured server sender before alerts can arrive in the background.</p>}{workerReady&&<div className="pushControls"><button type="button" className="secondary" disabled={pushBusy||!vapidKey} onClick={subscribePush}>Register this device for push</button><button type="button" className="subtle" disabled={pushBusy} onClick={unsubscribePush}>Unsubscribe this device</button>{!vapidKey&&<p className="statsNote">Background push registration is unavailable until the public VAPID key and secure sender are configured.</p>}{pushStatus&&<p role="status">{pushStatus}</p>}</div>}<div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
+  {installHint&&<p className="statsNote">On iPhone: Safari → Share → Add to Home Screen. iOS Web Push requires the installed app and notification permission.</p>}{workerReady&&<p className="statsNote">Service worker ready. Web Push requires a configured server sender before alerts can arrive in the background.</p>}{workerReady&&<div className="pushControls"><button type="button" className="secondary" disabled={pushBusy||!vapidKey} onClick={subscribePush}>{deviceRegistered?'Refresh this device registration':'Register this device for push'}</button><button type="button" className="subtle" disabled={pushBusy} onClick={unsubscribePush}>Unsubscribe this device</button>{!vapidKey&&<p className="statsNote">Background push registration is unavailable until the public VAPID key and secure sender are configured.</p>}<p className="statsNote">Device status: {deviceRegistered?'Registered on this account':'Not registered'} · {vapidKey?'Public push key configured':'Public push key missing'}. A registered device does not guarantee server delivery.</p>{pushStatus&&<p role="status">{pushStatus}</p>}</div>}<div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
   <label className="checkLabel"><input type="checkbox" checked={subscribed} onChange={e=>setSubscribed(e.target.checked)}/> Show release-day notifications while this page is open</label>
   {notice&&<p role="status">{notice}</p>}
   <div className="releaseList">{upcoming.slice(0,8).map(b=><p key={b.id}><strong>{b.release_on}</strong> · {b.title} <button type="button" className="subtle" onClick={()=>{setEditing(b.id);setDate(b.release_on)}}>Edit</button></p>)}</div>
