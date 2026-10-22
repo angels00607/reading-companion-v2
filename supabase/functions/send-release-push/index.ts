@@ -12,19 +12,16 @@ Deno.serve(async request=>{
  if(!url||!serviceKey||!publicKey||!privateKey||!subject)return respond({error:'Push sender is not configured'},503)
  webpush.setVapidDetails(subject,publicKey,privateKey)
  const db=createClient(url,serviceKey,{auth:{persistSession:false,autoRefreshToken:false}})
- const today=new Date().toISOString().slice(0,10)
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Zurich',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
  const {error:queueError}=await db.rpc('rc_queue_release_notifications',{p_date:today})
  if(queueError)return respond({error:'Could not queue due reminders'},500)
- const {data:jobs,error}=await db.from('rc_release_delivery_log').select('id,user_id,book_id,subscription_id,release_on,attempts,status').eq('release_on',today).in('status',['pending','failed']).lt('attempts',5).order('id',{ascending:true}).limit(100)
- if(error)return respond({error:'Could not load delivery queue'},500)
+ const {data:jobs,error}=await db.rpc('rc_claim_release_deliveries',{p_date:today,p_limit:100})
+ if(error)return respond({error:'Could not claim delivery jobs'},500)
  let sent=0,failed=0
  for(const job of jobs||[]){
   const {data:book}=await db.from('rc_books').select('id,title,author,release_on,release_alert_enabled,status,user_id').eq('id',job.book_id).eq('user_id',job.user_id).maybeSingle()
   const {data:device}=await db.from('rc_push_subscriptions').select('id,endpoint,p256dh,auth_secret,user_id').eq('id',job.subscription_id).eq('user_id',job.user_id).maybeSingle()
-  if(!book||!device||!book.release_alert_enabled||book.status!=='to_read'||book.release_on!==job.release_on)continue
-  // Claim each job before sending to avoid parallel scheduled executions sending the same reminder.
-  const {data:claimed}=await db.from('rc_release_delivery_log').update({status:'pending',attempts:job.attempts+1,updated_at:new Date().toISOString()}).eq('id',job.id).eq('attempts',job.attempts).eq('status',job.status).select('id')
-  if(!claimed?.length)continue
+  if(!book||!device||!book.release_alert_enabled||book.status!=='to_read'||book.release_on!==job.release_on){await db.from('rc_release_delivery_log').update({status:'failed',updated_at:new Date().toISOString()}).eq('id',job.id);continue}
   try{
    await webpush.sendNotification({endpoint:device.endpoint,keys:{p256dh:device.p256dh,auth:device.auth_secret}},JSON.stringify({title:'Book release today',body:book.title+(book.author?' — '+book.author:''),tag:'release-'+book.id+'-'+job.release_on}),{TTL:86400})
    await db.from('rc_release_delivery_log').update({status:'sent',updated_at:new Date().toISOString()}).eq('id',job.id)
