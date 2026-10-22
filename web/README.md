@@ -37,3 +37,9 @@ Seven challenge views: Alphabet (26 letters), Around the World (20 verified citi
 Version A applies to even years from 2020 and Version B to odd years. Eligibility uses dated completed reading sessions when available, so a reread may count in its actual completion year. DNF and currently-reading books do not qualify. Monthly and seasonal challenges use the actual session completion month. Challenge matches (city, trope, archetype, prompt) require the reader's confirmation; the app does not infer them.
 
 **Known content gap:** Archetypes B position 10 is intentionally empty, and positions 12–20 require the user's original prompt wording. They are not auto-generated. Automated challenge rules tests run before Web deployment. End-to-end assignment/removal tests with an authenticated account remain necessary before calling the challenge workflow fully verified.
+
+## Gamification (Phase 5)
+
+The Home view displays seven derived lifetime achievements and three monthly quests. Monthly quests renew by the local calendar month and derive their progress from saved completed readings; they require no scheduled jobs or additional database tables. DNF books are excluded, rereads count as dated completions, and missing page counts are not estimated. Five regression tests cover milestone counts, rereads, DNF exclusion and monthly rollover.
+
+**Release alerts:** The Home view can request browser notification permission, but this is only permission setup. Automated alerts about new book releases are **not implemented**: there is no verified release-date feed, backend scheduler or push subscription. The UI states this limitation explicitly and does not claim to send alerts. Browser permission alone does not provide background push notifications.
