@@ -436,10 +436,11 @@ function parseStoryGraphCSV(source){
 function StoryGraphImport({books,onImport,busy}){
  const [items,setItems]=useState([]),[error,setError]=useState(''),[name,setName]=useState(''),[includeDates,setIncludeDates]=useState(true)
  const key=x=>(x.title||'').trim().toLocaleLowerCase()+'|'+(x.author||'').trim().toLocaleLowerCase()
- const existing=new Set(books.map(key)),seen=new Set(),seenIsbns=new Set()
+ const hasId=x=>!!(x.isbn_13||x.isbn_10)
+ const seen=[]
  const preview=items.map(x=>{
-  const duplicate=existing.has(key(x))||(x.isbn_13&&books.some(b=>b.isbn_13===x.isbn_13))||(x.isbn_10&&books.some(b=>b.isbn_10===x.isbn_10))||seen.has(key(x))||(x.isbn_13&&seenIsbns.has(x.isbn_13))||(x.isbn_10&&seenIsbns.has(x.isbn_10))
-  seen.add(key(x));if(x.isbn_13)seenIsbns.add(x.isbn_13);if(x.isbn_10)seenIsbns.add(x.isbn_10)
+  const duplicate=books.some(b=>(x.isbn_13&&b.isbn_13===x.isbn_13)||(x.isbn_10&&b.isbn_10===x.isbn_10)||(key(b)===key(x)&&(!hasId(x)||(!b.isbn_13&&!b.isbn_10))))||seen.some(b=>(x.isbn_13&&b.isbn_13===x.isbn_13)||(x.isbn_10&&b.isbn_10===x.isbn_10)||(key(b)===key(x)&&(!hasId(x)||!hasId(b))))
+  seen.push(x)
   return {...x,duplicate:!!duplicate}
  })
  const eligible=preview.filter(x=>!x.duplicate&&x.status&&x.warnings.length===0)
