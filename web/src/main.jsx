@@ -426,6 +426,14 @@ function parseStoryGraphCSV(source){
   const datesRead=find(r,'Dates Read')
   const readCountRaw=find(r,'Read Count')
   const readCount=/^\d+$/.test(readCountRaw)?Number(readCountRaw):null
+  const sessions=datesRead.split(',').map(part=>part.trim()).filter(Boolean).map(part=>{
+   const match=part.match(/^(\d{4}[\/-]\d{2}[\/-]\d{2})(?:\s*-\s*(\d{4}[\/-]\d{2}[\/-]\d{2}))?$/)
+   if(!match)return null
+   const started=normalizeDate(match[1]),finished=normalizeDate(match[2]||match[1])
+   return validDate(started)&&validDate(finished)&&started<=finished?{started_on:started,finished_on:finished}:null
+  })
+  const completeSessions=sessions.filter(Boolean)
+  if(status==='finished'&&finishedOn&&!completeSessions.some(s=>s.finished_on===finishedOn))completeSessions.push({started_on:null,finished_on:finishedOn})
   const ratingRaw=find(r,'Star Rating','Rating')
   const rating=ratingRaw!==''&&Number.isInteger(Number(ratingRaw))&&Number(ratingRaw)>=1&&Number(ratingRaw)<=5?Number(ratingRaw):null
   const isbn=find(r,'ISBN/UID','ISBN','ISBN13').replace(/[^0-9Xx]/g,'')
@@ -433,10 +441,11 @@ function parseStoryGraphCSV(source){
   if(!status)warnings.push('Unrecognized reading status')
   if(dateRaw&&!finishedOn)warnings.push('Invalid finish date')
   if(status==='finished'&&!dateRaw)warnings.push('Missing finish date (needed for yearly statistics)')
-  if(readCount!==null&&readCount>1)warnings.push('Multiple readings: review dates before import')
+  if(status==='finished'&&sessions.some(s=>!s))warnings.push('Unrecognized reading session dates')
+  if(status==='finished'&&readCount!==null&&readCount>completeSessions.length)warnings.push('Some reading sessions have no dates')
   if(ratingRaw&&rating===null)warnings.push('Rating not a whole star (1–5)')
   if(pagesRaw&&!pages)warnings.push('Invalid page count')
-  return {row:index+2,title,author,status,warnings,pages,raw_pages:pagesRaw,raw_date:finishedOn||dateRaw,raw_rating:ratingRaw,raw_status:statusRaw,read_count:readCount,dates_read:datesRead,finished_on:status==='finished'?finishedOn:null,rating:status==='finished'?rating:null,isbn_13:/^\d{13}$/.test(isbn)?isbn:null,isbn_10:/^\d{9}[0-9Xx]$/.test(isbn)?isbn:null}
+  return {row:index+2,title,author,status,warnings,pages,raw_pages:pagesRaw,raw_date:finishedOn||dateRaw,raw_rating:ratingRaw,raw_status:statusRaw,read_count:readCount,dates_read:datesRead,sessions:status==='finished'?completeSessions:[],finished_on:status==='finished'?finishedOn:null,rating:status==='finished'?rating:null,isbn_13:/^\d{13}$/.test(isbn)?isbn:null,isbn_10:/^\d{9}[0-9Xx]$/.test(isbn)?isbn:null}
  }).filter(x=>x.title)
 }
 function StoryGraphImport({books,onImport,busy}){
@@ -467,7 +476,7 @@ function StoryGraphImport({books,onImport,busy}){
    if(next.raw_pages!==''&&(next.pages===null||!Number.isInteger(next.pages)||next.pages<1||next.pages>100000))warnings.push('Invalid page count')
    if(next.raw_date&&!validDate(next.raw_date))warnings.push('Invalid finish date')
    if(next.status==='finished'&&!next.raw_date)warnings.push('Missing finish date (needed for yearly statistics)')
-   if(next.read_count>1&&!next.reviewsRereads)warnings.push('Multiple readings: review dates before import')
+   if(next.status==='finished'&&next.read_count>1&&next.read_count>(next.sessions||[]).length&&!next.reviewsRereads)warnings.push('Some reading sessions have no dates')
    if(next.raw_rating!==''&&(next.rating===null||!Number.isInteger(next.rating)||next.rating<1||next.rating>5))warnings.push('Rating not a whole star (1–5)')
    next.finished_on=next.status==='finished'&&validDate(next.raw_date)?next.raw_date:null
    next.rating=next.status==='finished'&&next.raw_rating!==''&&Number.isInteger(Number(next.raw_rating))&&Number(next.raw_rating)>=1&&Number(next.raw_rating)<=5?Number(next.raw_rating):null
@@ -482,7 +491,7 @@ function StoryGraphImport({books,onImport,busy}){
   try{const parsed=parseStoryGraphCSV(await file.text());if(parsed.length>10000)throw new Error('Maximum 10,000 books per file.');setItems(parsed);setName(file.name)}
   catch(err){setError(err.message||'Could not read CSV.')}
  }
- return <section className="storygraphImport"><h2>Import from StoryGraph</h2><p>Export your reading data as CSV from StoryGraph, then preview it here. The file is parsed on your device; only confirmed books are sent to your library.</p><label>StoryGraph CSV file<input type="file" accept=".csv,text/csv" onChange={choose} disabled={busy}/></label>{error&&<p role="alert">{error}</p>}{items.length>0&&<><p><strong>{name}</strong> · {items.length} books found · {eligible.length} new · {preview.filter(x=>x.duplicate).length} duplicates · {needsReview.length} need review</p><label className="importOption"><input type="checkbox" checked={includeDates} onChange={e=>setIncludeDates(e.target.checked)}/> Import finish dates and whole-star ratings when available</label><p>Correct excluded rows below. Fractional ratings are not rounded automatically. Formats and series details are not guessed. Preview shows the first 20 rows.</p>{needsReview.length>0&&<details className="importIssues" open><summary>Review and correct {needsReview.length} excluded rows</summary><div className="importPreview">{needsReview.slice(0,100).map(x=><div className="importCorrection" key={x.row}><strong>Row {x.row}: {x.title}</strong>{x.read_count>1&&<p>Read count: {x.read_count}. Dates: {x.dates_read||'not supplied'}. Only the latest completion date will be stored; earlier reading sessions are not imported.</p>}<p role="status">{x.warnings.join('; ')}</p><div className="importCorrectionFields"><label>Status<select value={x.status||''} onChange={e=>edit(x.row,'status',e.target.value)} disabled={busy}><option value="">Select status</option><option value="to_read">To Read</option><option value="reading">Currently Reading</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label><label>Pages<input type="number" min="1" max="100000" value={x.raw_pages??''} onChange={e=>edit(x.row,'pages',e.target.value)} disabled={busy}/></label><label>Finish date (YYYY-MM-DD)<input type="text" inputMode="numeric" placeholder="YYYY-MM-DD" value={x.raw_date??''} onChange={e=>edit(x.row,'finished_on',e.target.value)} disabled={busy}/></label><label>Rating (whole stars)<input type="number" min="1" max="5" step="1" value={x.raw_rating??''} onChange={e=>edit(x.row,'rating',e.target.value)} disabled={busy}/></label>{x.read_count>1&&<label><input type="checkbox" checked={!!x.reviewsRereads} onChange={e=>edit(x.row,'reviewsRereads',e.target.checked)} disabled={busy}/> Import only the latest reading; earlier sessions will not be imported</label>}</div></div>)}{needsReview.length>100&&<p>Showing the first 100 issues.</p>}</div></details>}<div className="importPreview">{preview.slice(0,20).map(x=><div key={x.row}><strong>{x.title}</strong> — {x.author||'Unknown author'} <small>({x.status||'unknown status'}{x.duplicate?', duplicate':''}{x.warnings.length?', '+x.warnings.join('; '):''})</small></div>)}</div><button disabled={busy||!eligible.length} onClick={async()=>{const ok=await onImport(eligible,includeDates);if(ok){setItems([]);setName('')}}}>{busy?'Importing…':'Import '+eligible.length+' new books'}</button></>}</section>
+ return <section className="storygraphImport"><h2>Import from StoryGraph</h2><p>Export your reading data as CSV from StoryGraph, then preview it here. The file is parsed on your device; only confirmed books are sent to your library.</p><label>StoryGraph CSV file<input type="file" accept=".csv,text/csv" onChange={choose} disabled={busy}/></label>{error&&<p role="alert">{error}</p>}{items.length>0&&<><p><strong>{name}</strong> · {items.length} books found · {eligible.length} new · {preview.filter(x=>x.duplicate).length} duplicates · {needsReview.length} need review</p><label className="importOption"><input type="checkbox" checked={includeDates} onChange={e=>setIncludeDates(e.target.checked)}/> Import finish dates and whole-star ratings when available</label><p>Correct excluded rows below. Fractional ratings are not rounded automatically. Formats and series details are not guessed. Preview shows the first 20 rows.</p>{needsReview.length>0&&<details className="importIssues" open><summary>Review and correct {needsReview.length} excluded rows</summary><div className="importPreview">{needsReview.slice(0,100).map(x=><div className="importCorrection" key={x.row}><strong>Row {x.row}: {x.title}</strong>{x.read_count>1&&<p>Read count: {x.read_count}. Dates: {x.dates_read||'not supplied'}. {x.sessions?.length||0} dated session(s) available for import; missing sessions cannot be reconstructed.</p>}<p role="status">{x.warnings.join('; ')}</p><div className="importCorrectionFields"><label>Status<select value={x.status||''} onChange={e=>edit(x.row,'status',e.target.value)} disabled={busy}><option value="">Select status</option><option value="to_read">To Read</option><option value="reading">Currently Reading</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label><label>Pages<input type="number" min="1" max="100000" value={x.raw_pages??''} onChange={e=>edit(x.row,'pages',e.target.value)} disabled={busy}/></label><label>Finish date (YYYY-MM-DD)<input type="text" inputMode="numeric" placeholder="YYYY-MM-DD" value={x.raw_date??''} onChange={e=>edit(x.row,'finished_on',e.target.value)} disabled={busy}/></label><label>Rating (whole stars)<input type="number" min="1" max="5" step="1" value={x.raw_rating??''} onChange={e=>edit(x.row,'rating',e.target.value)} disabled={busy}/></label>{x.read_count>1&&<label><input type="checkbox" checked={!!x.reviewsRereads} onChange={e=>edit(x.row,'reviewsRereads',e.target.checked)} disabled={busy}/> Import available dated sessions; acknowledge missing sessions</label>}</div></div>)}{needsReview.length>100&&<p>Showing the first 100 issues.</p>}</div></details>}<div className="importPreview">{preview.slice(0,20).map(x=><div key={x.row}><strong>{x.title}</strong> — {x.author||'Unknown author'} <small>({x.status||'unknown status'}{x.duplicate?', duplicate':''}{x.warnings.length?', '+x.warnings.join('; '):''})</small></div>)}</div><button disabled={busy||!eligible.length} onClick={async()=>{const ok=await onImport(eligible,includeDates);if(ok){setItems([]);setName('')}}}>{busy?'Importing…':'Import '+eligible.length+' new books'}</button></>}</section>
 }
 function BookCatalogSearch({books,onAdd,busy}){
  const [term,setTerm]=useState(''),[mode,setMode]=useState('all'),[results,setResults]=useState([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[searched,setSearched]=useState(false),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false)
@@ -532,9 +541,16 @@ function App(){
   let count=0
   for(let i=0;i<items.length;i+=25){
    const batch=items.slice(i,i+25).map(b=>({user_id:session.user.id,title:b.title,author:b.author,status:b.status,page_count:b.pages,isbn_13:b.isbn_13,isbn_10:b.isbn_10,finished_on:includeDates?b.finished_on:null,rating:includeDates?b.rating:null}))
-   const {error}=await supabase.from('rc_books').insert(batch)
+   const {data:created,error}=await supabase.from('rc_books').insert(batch).select('id')
    if(error){setMessage('Imported '+count+' books before an error: '+error.message);setBusy(false);await load();return false}
    count+=batch.length
+   if(includeDates){
+    const sessions=created.flatMap((book,index)=>(items[i+index].sessions||[]).map(s=>({book_id:book.id,user_id:session.user.id,started_on:s.started_on,finished_on:s.finished_on})))
+    if(sessions.length){
+     const {error:sessionError}=await supabase.from('rc_reading_sessions').insert(sessions)
+     if(sessionError){setMessage('Imported '+count+' books, but reading sessions could not be saved: '+sessionError.message);setBusy(false);await load();return false}
+    }
+   }
   }
   setBusy(false);setMessage('Imported '+count+' books from StoryGraph.');await load();return true
  }
