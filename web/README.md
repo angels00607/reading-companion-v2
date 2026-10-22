@@ -49,3 +49,9 @@ The Home view displays seven derived lifetime achievements and three monthly que
 The user may manually enter a verified publication date for a To Read book. Supabase stores `rc_books.release_on` and `rc_books.release_alert_enabled` under existing book RLS. When notification permission is granted, the open Web app checks due reminders on mount, data refresh and every minute, displaying a browser Notification once per book per local release day. A user-specific localStorage key prevents repeat notifications on the same browser. Removing a reminder clears both fields. Dates are not guessed or automatically imported.
 
 **Limitations:** This is an in-app/open-tab browser notification, not Web Push. It does not run with the app closed, does not sync delivery state between devices, and requires browser permission. Background delivery would need service-worker Push subscriptions, VAPID keys, a secure server-side sender and scheduled publication-date checks. Test manually in a signed-in browser with a verified date before claiming end-to-end validation.
+
+### Publication date lookup
+
+The release reminder editor now offers a Google Books search using ISBN when known, or title/author otherwise. Only exact valid YYYY-MM-DD dates are offered, and the user must review the matching edition/publisher and explicitly select/save a date. Partial dates and mismatched titles are not silently converted into release days. Google Books metadata can refer to an earlier edition and is not a guaranteed upcoming-release feed. This feature requires network access to Google's Books API.
+
+**Background notifications remain unimplemented.** iOS Home Screen web push requires an installed PWA, service worker, Push API subscription and server-side scheduled delivery; this is separate from open-page browser notifications. No push is claimed to be active.
