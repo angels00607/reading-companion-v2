@@ -30,6 +30,7 @@ jobs:
       - name: Build web app
         working-directory: web
         env:
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
           VITE_SUPABASE_URL: https://skenuigulnonrshkwelu.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_fch6NSx050hyF61mInrQPQ_hzlWW1-_
         run: npm run build
