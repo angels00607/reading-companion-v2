@@ -12,16 +12,46 @@ const accent={Home:'#8364AC',Library:'#695080',Series:'#6E739F',Journal:'#B76C9D
 const formats=[['','Not selected'],['paperback','Paperback'],['hardcover','Hardcover'],['ebook','E-book'],['audiobook','Audiobook']]
 const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished','Finished'],['dnf','DNF']]
 const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-function ReleaseReminder({books}){
+function ReleaseReminder({books,userId,onSave}){
  const [enabled,setEnabled]=useState(false)
  const [notice,setNotice]=useState('')
+ const [editing,setEditing]=useState('')
+ const [date,setDate]=useState('')
+ const [subscribed,setSubscribed]=useState(true)
+ const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+ const tracked=books.filter(b=>b.release_alert_enabled&&b.release_on&&b.status==='to_read').sort((a,b)=>a.release_on.localeCompare(b.release_on))
+ const upcoming=tracked.filter(b=>b.release_on>=today())
  useEffect(()=>{setEnabled(typeof Notification!=='undefined'&&Notification.permission==='granted')},[])
+ useEffect(()=>{
+  if(!userId||!enabled||!subscribed||typeof Notification==='undefined'||Notification.permission!=='granted')return
+  const todayLocal=today()
+  const due=tracked.filter(b=>b.release_on===todayLocal)
+  for(const b of due){
+   const key='rc-release-alert:'+userId+':'+b.id+':'+todayLocal
+   try{
+    if(localStorage.getItem(key))continue
+    new Notification('Book release today',{body:b.title+(b.author?' — '+b.author:''),tag:key})
+    localStorage.setItem(key,'shown')
+   }catch(err){setNotice('This browser cannot display a notification: '+(err.message||'unknown error'));break}
+  }
+ },[books,userId,enabled,subscribed])
  async function enable(){
   if(typeof Notification==='undefined'){setNotice('This browser does not support notifications.');return}
   if(!window.isSecureContext){setNotice('Notifications require HTTPS.');return}
-  try{const result=await Notification.requestPermission();setEnabled(result==='granted');setNotice(result==='granted'?'Permission granted. Release tracking requires a verified publication source and scheduled checks, which are not configured yet.':'Permission was not granted.')}catch(err){setNotice(err.message||'Unable to request notification permission.')}
+  try{const result=await Notification.requestPermission();setEnabled(result==='granted');setNotice(result==='granted'?'Notifications enabled while the app is open. Background push is not configured.':'Notification permission was not granted.')}catch(err){setNotice(err.message||'Unable to request permission.')}
  }
- return <section className="releaseReminder"><h3>New release alerts</h3><p>Automatic publication-date tracking is not connected yet. No release dates or notifications are invented.</p><p>{books.filter(b=>b.status==='to_read').length} books on your To Read list.</p><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Notifications permitted':'Allow browser notifications'}</button>{notice&&<p role="status">{notice}</p>}</section>
+ async function save(book,dateValue,active){
+  const success=await onSave(book,{release_on:dateValue||null,release_alert_enabled:!!(dateValue&&active)})
+  if(success){setEditing('');setDate('')}
+ }
+ return <section className="releaseReminder"><h3>Book release reminders</h3><p>Enter a confirmed release date for a book in your To Read list. Dates are saved to your account. On the release day, this browser can notify you when Reading Companion is open. This is not background push and release dates are not fetched automatically.</p>
+  <div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
+  <label className="checkLabel"><input type="checkbox" checked={subscribed} onChange={e=>setSubscribed(e.target.checked)}/> Show release-day notifications while this page is open</label>
+  {notice&&<p role="status">{notice}</p>}
+  <div className="releaseList">{upcoming.slice(0,8).map(b=><p key={b.id}><strong>{b.release_on}</strong> · {b.title} <button type="button" className="subtle" onClick={()=>{setEditing(b.id);setDate(b.release_on)}}>Edit</button></p>)}</div>
+  <label>Track a To Read book <select value={editing} onChange={e=>{setEditing(e.target.value);setDate(books.find(b=>b.id===e.target.value)?.release_on||'')}}><option value="">Choose book…</option>{books.filter(b=>b.status==='to_read').map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select></label>
+  {editing&&<div className="releaseEditor"><label>Verified publication date <input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button type="button" disabled={!date} onClick={()=>save(books.find(b=>b.id===editing),date,true)}>Save reminder</button><button type="button" className="subtle" onClick={()=>save(books.find(b=>b.id===editing),'',false)}>Remove reminder</button></div>}
+ </section>
 }
 function ReadingRewards({books,sessions}){
  const [showAll,setShowAll]=useState(false)
@@ -511,7 +541,7 @@ function App(){
  const [sessionEdit,setSessionEdit]=useState(null),[sessionStart,setSessionStart]=useState(''),[sessionFinish,setSessionFinish]=useState(''),[quoteText,setQuoteText]=useState('')
  const [tbrSeriesSafe,setTbrSeriesSafe]=useState(false),[tbrMode,setTbrMode]=useState('all'),[tbrMaxPages,setTbrMaxPages]=useState(''),[tbrMinPages,setTbrMinPages]=useState(''),[tbrAuthor,setTbrAuthor]=useState(''),[tbrFormat,setTbrFormat]=useState('all'),[tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false),[libraryStatus,setLibraryStatus]=useState('all'),[librarySort,setLibrarySort]=useState('recent'),[nextPick,setNextPick]=useState(null)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[])
- async function load(){if(!session)return;const {data:sessionRows,error:sessionError}=await supabase.from('rc_reading_sessions').select('id,book_id,started_on,finished_on').order('finished_on',{ascending:false});if(sessionError)setMessage(sessionError.message);else setReadingSessions(sessionRows||[]);const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite,series_name,series_number,series_volume_kind,catalog_source,catalog_volume_id,isbn_13,isbn_10').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
+ async function load(){if(!session)return;const {data:sessionRows,error:sessionError}=await supabase.from('rc_reading_sessions').select('id,book_id,started_on,finished_on').order('finished_on',{ascending:false});if(sessionError)setMessage(sessionError.message);else setReadingSessions(sessionRows||[]);const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite,series_name,series_number,series_volume_kind,catalog_source,catalog_volume_id,isbn_13,isbn_10,release_on,release_alert_enabled').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
  useEffect(()=>{if(session)load();else{setBooks([]);setReadingSessions([])}},[session?.user?.id])
  useEffect(()=>{const onFocus=()=>{if(session)load()};const onVisible=()=>{if(document.visibilityState==='visible'&&session)load()};window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onVisible);return()=>{window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible)}},[session])
  async function auth(mode){setBusy(true);setMessage('');const {error}=mode==='login'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password});setBusy(false);setMessage(error?error.message:mode==='signup'?'Account created. Check your email if confirmation is required.':'')}
@@ -534,6 +564,12 @@ function App(){
    setMessage('Import cancelled without partial changes: '+(err.message||'Unknown error')+'. Check the CSV and try again.')
    return false
   }finally{setBusy(false)}
+ }
+ async function saveReleaseReminder(book,payload){
+  if(!book||book.status!=='to_read')return false
+  const {error}=await supabase.from('rc_books').update(payload).eq('id',book.id).eq('user_id',session.user.id)
+  if(error){setMessage(error.message);return false}
+  await load();return true
  }
  async function addCatalogBook(book){
   const normalize=value=>(value||'').trim().toLocaleLowerCase()
@@ -655,7 +691,7 @@ function App(){
   {!ready?<main>Loading…</main>:!session?<main className="auth"><h2>Your reading space</h2><p>Sign in to keep your books together on iPhone and Mac.</p><form onSubmit={e=>{e.preventDefault();auth('login')}}><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" minLength="6" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Sign in</button><button type="button" className="secondary" disabled={busy} onClick={()=>auth('signup')}>Create account</button></form></main>:
   <main>
    <div className="account"><span>{session.user.email}</span><div><button className="subtle" onClick={load}>↻ Sync</button><button className="subtle" onClick={()=>supabase.auth.signOut()}>Sign out</button></div></div>
-   {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><ReadingRewards books={books} sessions={readingSessions}/><ReleaseReminder books={books}/><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
+   {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><ReadingRewards books={books} sessions={readingSessions}/><ReleaseReminder books={books} userId={session.user.id} onSave={saveReleaseReminder}/><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
    tab==='Journal'?<><div className="hero"><h2>Your reading journal</h2><p>Reviews, reading dates, favorite books and quotes. DNF books are kept separate from completed reads.</p></div><div className="cards">{books.filter(b=>b.status==='finished'||b.status==='dnf'||b.status==='reading').map(b=><article key={b.id}><strong>{b.favorite?'♥ ':''}{b.title}</strong><p>{b.author||'Unknown author'} · {statuses.find(s=>s[0]===b.status)?.[1]}</p>{b.rating&&b.status==='finished'&&<p aria-label={`${b.rating} out of 5 stars`}>{'★'.repeat(b.rating)}{'☆'.repeat(5-b.rating)}</p>}{b.review&&<p>{b.review}</p>}<button className="subtle" onClick={()=>openJournal(b)}>Journal entry</button></article>)}{!books.some(b=>['finished','dnf','reading'].includes(b.status))&&<p>Start reading a book to create your first journal entry.</p>}</div></>:
    tab==='Statistics'?<StatisticsView books={books} sessions={readingSessions} onOpenJournal={openJournal}/>:
    tab==='Challenges'?<ChallengesView books={books} sessions={readingSessions} session={session}/>: 
