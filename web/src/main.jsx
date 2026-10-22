@@ -253,7 +253,7 @@ function RouletteView({books,sessions,session,year,variant}){
   if(ee)setError(ee.message);else{setPrompts(list);setEntries(e||[]);setError('')}
  }
  useEffect(()=>{setPrompts([]);setEntries([]);setPending(null);refresh()},[year,variant,session.user.id])
- const eligible=books.filter(b=>b.status==='finished'&&b.finished_on?.startsWith(String(year))&&!entries.some(e=>e.book_id===b.id))
+ const eligible=eligibleChallengeBooks(books,sessions,year).filter(b=>!entries.some(e=>e.book_id===b.id))
  async function assign(){
   if(!pending||!verified)return
   setBusy(true);setError('')
@@ -318,12 +318,12 @@ function ChallengesView({books,sessions,session}){
   <div className="alphabetGrid">{alphabet.map(letter=>{
    const assigned=entries.find(e=>e.prompt===letter)
    const match=assigned&&books.find(b=>b.id===assigned.book_id)
-   const choices=available.filter(b=>b.title.trim().charAt(0).toUpperCase()===letter&&!entries.some(e=>e.book_id===b.id))
+   const choices=available.filter(b=>b.title.trim().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').charAt(0).toUpperCase()===letter&&!entries.some(e=>e.book_id===b.id))
    return <article key={letter} className={assigned?'filled':''}><strong>{letter}</strong><span>{match?match.title:'Available'}</span>
     {assigned?<button className="subtle" disabled={working} onClick={()=>assign(letter,null)}>Remove</button>:<select aria-label={'Assign a book to letter '+letter} disabled={working||!choices.length} value="" onChange={e=>assign(letter,e.target.value)}><option value="">{choices.length?'Choose book…':'No eligible books'}</option>{choices.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select>}
    </article>
   })}</div>
-  <p className="statsNote">Eligible books must be marked Finished, have a finish date in the selected year, and begin with the selected letter. Other challenges will be added using your exact prompt lists.</p></>}
+  <p className="statsNote">Eligible books must be marked Finished, have a finish date in the selected year, and begin with the selected letter. Challenge entries are assigned manually; the app never guesses a book's trope, archetype or setting.</p></>}
  </section>
 }
 function SeriesShelf({books,onEdit,onStart,onViewLibrary,session}){
