@@ -2,7 +2,9 @@ export function decodeVapidKey(value){
  if(typeof value!=='string'||!/^[A-Za-z0-9_-]{86,88}$/.test(value))throw new Error('A valid public VAPID key is required.')
  const base64=value.replace(/-/g,'+').replace(/_/g,'/')
  const raw=atob(base64.padEnd(Math.ceil(base64.length/4)*4,'='))
- return Uint8Array.from(raw,char=>char.charCodeAt(0))
+ const bytes=Uint8Array.from(raw,char=>char.charCodeAt(0))
+ if(bytes.length!==65||bytes[0]!==4)throw new Error('Invalid VAPID public key format.')
+ return bytes
 }
 export function encodePushKey(buffer){
  const bytes=new Uint8Array(buffer)
