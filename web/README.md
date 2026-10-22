@@ -84,3 +84,7 @@ The Supabase Edge Function `send-release-push` is deployed as version 2 and uses
 4. Run **Send release push reminders** manually to validate the server response before relying on its daily schedule. Test a legitimate due release on a device; never edit another user's records or use production dates for an artificial test.
 
 The scheduler is UTC 07:15 every day. It is deliberately inert when the job secret is absent. Only public VAPID material belongs in the browser. The deployment cannot be fully activated from this session without secure secret configuration and a real device test.
+
+### iPhone notification diagnostic
+
+Open the installed Reading Companion PWA on the iPhone, sign in, navigate to **Book release reminders**, then tap **Test notification on this device**. This asks iOS for notification permission and requests a local service-worker notification. It checks device permission and local display only; it does **not** prove that server Web Push works while the app is closed. Once the VAPID and job secrets are configured, use **Register this device for push** and perform a separate end-to-end test with a genuine due release.
