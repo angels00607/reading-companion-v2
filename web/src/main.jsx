@@ -574,10 +574,11 @@ function App(){
  async function saveReadingSession(e){
   e.preventDefault()
   if(!sessionFinish){setMessage('A finish date is required for a completed reading.');return}
+  const todayLocal=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
   if(readingSessions.some(s=>s.book_id===journalBook&&s.id!==sessionEdit&&(s.started_on||null)===(sessionStart||null)&&s.finished_on===sessionFinish)){setMessage('This reading session already exists. Choose different dates or edit the existing session.');return}
   if(sessionStart&&sessionStart>sessionFinish){setMessage('Finish date cannot be before start date.');return}
   if(!journalDraft||journalDraft.status!=='finished'){setMessage('Only finished books can have completed reading sessions.');return}
-  if(sessionFinish>new Date().toISOString().slice(0,10)){setMessage('A completed reading cannot have a future finish date.');return}
+  if(sessionFinish>todayLocal()){setMessage('A completed reading cannot have a future finish date.');return}
   setBusy(true)
   const payload={started_on:sessionStart||null,finished_on:sessionFinish}
   const request=sessionEdit?supabase.from('rc_reading_sessions').update(payload).eq('id',sessionEdit).eq('book_id',journalBook).eq('user_id',session.user.id):supabase.from('rc_reading_sessions').insert({...payload,book_id:journalBook,user_id:session.user.id})
@@ -599,7 +600,7 @@ function App(){
   if(journalDraft.started_on&&journalDraft.finished_on&&journalDraft.finished_on<journalDraft.started_on){setMessage('Finish date cannot be before start date.');return}
   if(journalDraft.rating!==null&&journalDraft.rating!==''&&journalDraft.status!=='finished'){setMessage('Ratings are for finished books only.');return}
   if(journalDraft.status==='finished'&&!journalDraft.finished_on){setMessage('Finished books need a finish date for yearly statistics and challenges.');return}
-  if(journalDraft.finished_on&&journalDraft.finished_on>new Date().toISOString().slice(0,10)){setMessage('Finish date cannot be in the future.');return}
+  if(journalDraft.finished_on&&journalDraft.finished_on>new Date().toLocaleDateString('en-CA')){setMessage('Finish date cannot be in the future.');return}
   if(journalDraft.status==='to_read'&&(journalDraft.started_on||journalDraft.finished_on)){setMessage('To Read books cannot have reading dates. Change the status first, or clear the dates.');return}
   if(journalDraft.status==='finished'&&readingSessions.some(s=>s.book_id===journalDraft.id)&&journalDraft.finished_on!==readingSessions.filter(s=>s.book_id===journalDraft.id&&s.finished_on).map(s=>s.finished_on).sort().at(-1)){setMessage('The finish date must match the latest completed reading session. Edit the session dates below first.');return}
   const payload={started_on:journalDraft.started_on||null,finished_on:journalDraft.finished_on||null,rating:journalDraft.status==='finished'?(journalDraft.rating===''?null:journalDraft.rating):null,review:journalDraft.review||'',favorite:!!journalDraft.favorite}
