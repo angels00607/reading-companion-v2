@@ -3,20 +3,16 @@ on:
   schedule:
     - cron: '15 7 * * *'
   workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-push
+  cancel-in-progress: false
 jobs:
   send:
     runs-on: ubuntu-latest
     steps:
-      - name: Check required secrets
-        env:
-          PUSH_JOB_SECRET: ${{ secrets.RELEASE_PUSH_JOB_SECRET }}
-        run: |
-          if [ -z "$PUSH_JOB_SECRET" ]; then
-            echo "::notice::Push sender not activated: RELEASE_PUSH_JOB_SECRET missing."
-            exit 0
-          fi
       - name: Trigger authenticated push sender
-        if: ${{ env.SKIP_SENDER != 'true' }}
         env:
           PUSH_JOB_SECRET: ${{ secrets.RELEASE_PUSH_JOB_SECRET }}
         run: |
@@ -24,7 +20,7 @@ jobs:
             echo "Push sender not activated."
             exit 0
           fi
-          curl --fail-with-body --show-error --silent --retry 2 \
+          curl --fail-with-body --show-error --silent --max-time 60 \
             --request POST \
             --header "Authorization: Bearer $PUSH_JOB_SECRET" \
             --header 'Content-Type: application/json' \
