@@ -75,3 +75,12 @@ A protected delivery queue `rc_release_delivery_log` now tracks per-book, per-de
 ### Scheduled sender activation checklist (2026-10)
 
 The Supabase Edge Function `send-release-push` is deployed as version 2 and uses the Europe/Zurich calendar date. Delivery jobs are claimed atomically via service-only `rc_claim_release_deliveries` to reduce duplicate concurrent sends. GitHub Actions `.github/workflows/release-push.yml` is scheduled for 07:15 UTC daily (08:15/09:15 in Switzerland depending on DST). The workflow is a safe no-op until the GitHub Actions repository secret `RELEASE_PUSH_JOB_SECRET` is configured with the same high-entropy value as the Supabase Edge Function secret. Configure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` on the Supabase function and the matching public `VITE_VAPID_PUBLIC_KEY` in the Web build before enabling. **Do not reuse or publish private keys or send them in chat.** These secrets were not configured during this change. The sender remains inactive without them. Verify actual push delivery on an installed iPhone Home Screen PWA before relying on alerts.
+
+### Activate push without exposing secrets
+
+1. In Supabase → Edge Functions → Secrets, set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (for example a mailto: address) and a long random `RELEASE_PUSH_JOB_SECRET`.
+2. In GitHub → repository Settings → Secrets and variables → Actions, set the **secret** `RELEASE_PUSH_JOB_SECRET` to the identical job-secret value. Add `VITE_VAPID_PUBLIC_KEY` as a **repository variable** (not a secret) containing the matching public VAPID key. The Web build now reads this variable.
+3. Re-run **Deploy Reading Companion Web** to publish the public key. Install the PWA on the iPhone Home Screen and explicitly register the device in release reminders.
+4. Run **Send release push reminders** manually to validate the server response before relying on its daily schedule. Test a legitimate due release on a device; never edit another user's records or use production dates for an artificial test.
+
+The scheduler is UTC 07:15 every day. It is deliberately inert when the job secret is absent. Only public VAPID material belongs in the browser. The deployment cannot be fully activated from this session without secure secret configuration and a real device test.
