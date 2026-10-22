@@ -633,7 +633,7 @@ function BookCatalogSearch({books,onAdd,busy}){
    if(requestId!==requestRef.current)return
    setError(source==='Open Library'?'Google Books is unavailable; showing Open Library results instead.':'')
    setResults(previous=>offset===0?items:[...previous,...items.filter(x=>!previous.some(p=>p.id===x.id))])
-   setPage(offset);setHasMore((data.items||[]).length===20&&offset+20<total&&offset+20<200)
+   setPage(offset);setHasMore(items.length===20&&offset+20<total&&offset+20<200)
    setSearched(true)
   }catch(err){if(requestId===requestRef.current)setError(err.message||'Search failed. Please try again.')}finally{if(requestId===requestRef.current)setLoading(false)}
  }
