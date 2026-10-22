@@ -17,7 +17,7 @@ export function parseStoryGraphCSV(source){
   return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m-1&&parsed.getUTCDate()===d
  }
  const headers=rows.shift().map(x=>x.replace(/^\uFEFF/,'').trim().toLowerCase().replace(/[^a-z0-9]/g,''))
- const find=(record,...keys)=>{for(const key of keys){const i=headers.indexOf(key.replace(/[^a-z0-9]/g,''));if(i>=0&&record[i]?.trim())return record[i].trim()}return ''}
+ const find=(record,...keys)=>{for(const key of keys){const i=headers.indexOf(key.toLowerCase().replace(/[^a-z0-9]/g,''));if(i>=0&&record[i]?.trim())return record[i].trim()}return ''}
  if(!headers.includes('title')||!headers.some(h=>h==='authors'||h==='author'))throw new Error('This CSV does not have recognizable StoryGraph Title and Authors columns.')
  return rows.map((r,index)=>{
   const title=find(r,'Title'),author=find(r,'Authors','Author')
