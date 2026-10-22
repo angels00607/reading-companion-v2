@@ -22,6 +22,9 @@ function ReleaseReminder({books,userId,onSave}){
  const [dayTick,setDayTick]=useState(0)
  const [candidates,setCandidates]=useState([])
  const [lookingUp,setLookingUp]=useState(false)
+ const [workerReady,setWorkerReady]=useState(false)
+ const [installHint,setInstallHint]=useState(false)
+ useEffect(()=>{if(!('serviceWorker' in navigator))return;const scope=import.meta.env.BASE_URL;navigator.serviceWorker.register(scope+'sw.js',{scope}).then(()=>setWorkerReady(true)).catch(()=>setWorkerReady(false));setInstallHint(/iPhone|iPad|iPod/.test(navigator.userAgent)&&!window.matchMedia('(display-mode: standalone)').matches)},[])
  useEffect(()=>{const timer=window.setInterval(()=>setDayTick(v=>v+1),60000);return()=>window.clearInterval(timer)},[])
  const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
  const tracked=books.filter(b=>b.release_alert_enabled&&b.release_on&&b.status==='to_read').sort((a,b)=>a.release_on.localeCompare(b.release_on))
@@ -58,7 +61,7 @@ function ReleaseReminder({books,userId,onSave}){
   if(success){setEditing('');setDate('')}
  }
  return <section className="releaseReminder"><h3>Book release reminders</h3><p>Enter a confirmed release date for a book in your To Read list. Dates are saved to your account. On the release day, this browser can notify you when Reading Companion is open. This is not background push and release dates are not fetched automatically.</p>
-  <div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
+  {installHint&&<p className="statsNote">On iPhone: Safari → Share → Add to Home Screen. iOS Web Push requires the installed app and notification permission.</p>}{workerReady&&<p className="statsNote">Service worker ready for future Web Push delivery. No background push subscription or scheduled sender is active yet.</p>}<div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
   <label className="checkLabel"><input type="checkbox" checked={subscribed} onChange={e=>setSubscribed(e.target.checked)}/> Show release-day notifications while this page is open</label>
   {notice&&<p role="status">{notice}</p>}
   <div className="releaseList">{upcoming.slice(0,8).map(b=><p key={b.id}><strong>{b.release_on}</strong> · {b.title} <button type="button" className="subtle" onClick={()=>{setEditing(b.id);setDate(b.release_on)}}>Edit</button></p>)}</div>
