@@ -609,7 +609,7 @@ function BookCatalogSearch({books,onAdd,busy}){
    const isbn=/^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$/.test(normalized)?normalized:null
    const query=isbn?'isbn:'+isbn:mode==='title'?'intitle:'+q:mode==='author'?'inauthor:'+q:q
    const response=await fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(query)+'&startIndex='+offset+'&maxResults=20&printType=books'+(language!=='all'?'&langRestrict='+language:''))
-   if(!response.ok)throw new Error('Book catalog temporarily unavailable ('+response.status+').')
+   if(!response.ok)throw new Error('Google Books unavailable ('+response.status+'). Please try again later or add the book manually.')
    const data=await response.json()
    if(requestId!==requestRef.current)return
    const items=(data.items||[]).filter(x=>x.volumeInfo?.title).map(x=>({id:x.id,title:x.volumeInfo.title,author:(x.volumeInfo.authors||[]).join(', '),pages:x.volumeInfo.pageCount||null,cover:x.volumeInfo.imageLinks?.thumbnail?.replace('http:','https:')||null,published:x.volumeInfo.publishedDate||'',publisher:x.volumeInfo.publisher||'',language:x.volumeInfo.language||'',isbn:(x.volumeInfo.industryIdentifiers||[]).find(v=>v.type==='ISBN_13')?.identifier||'',isbn10:(x.volumeInfo.industryIdentifiers||[]).find(v=>v.type==='ISBN_10')?.identifier||'',description:x.volumeInfo.description||''}))
