@@ -34,7 +34,8 @@ function ReleaseReminder({books,userId,onSave}){
   if(!userId||!('serviceWorker' in navigator)||!('PushManager' in window))return
   ;(async()=>{
    try{
-    const registration=await navigator.serviceWorker.ready
+    const registration=await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
+    if(!registration){if(!cancelled)setDeviceRegistered(false);return}
     const subscription=await registration.pushManager.getSubscription()
     if(!subscription){if(!cancelled)setDeviceRegistered(false);return}
     const {data,error}=await supabase.from('rc_push_subscriptions').select('id').eq('user_id',userId).eq('endpoint',subscription.endpoint).limit(1)
@@ -69,6 +70,21 @@ function ReleaseReminder({books,userId,onSave}){
   if(!window.isSecureContext){setNotice('Notifications require HTTPS.');return}
   try{const result=await Notification.requestPermission();setEnabled(result==='granted');setNotice(result==='granted'?'Notifications enabled while the app is open. Background push is not configured.':'Notification permission was not granted.')}catch(err){setNotice(err.message||'Unable to request permission.')}
  }
+ async function testLocalNotification(){
+  if(!('serviceWorker' in navigator)||typeof Notification==='undefined'){setPushStatus('Notifications are not supported in this browser.');return}
+  if(!window.isSecureContext){setPushStatus('Notifications require HTTPS.');return}
+  setPushBusy(true)
+  try{
+   const permission=await Notification.requestPermission()
+   setEnabled(permission==='granted')
+   if(permission!=='granted'){setPushStatus('Notification permission was not granted.');return}
+   const registration=await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
+   if(!registration||!registration.showNotification){setPushStatus('Install Reading Companion on your iPhone Home Screen and open it there to test notifications.');return}
+   await registration.showNotification('Reading Companion test',{body:'Notifications are working on this device while the app is open.',tag:'rc-local-test',icon:import.meta.env.BASE_URL+'icon.svg',data:{url:import.meta.env.BASE_URL}})
+   setPushStatus('Local test notification requested. This does not test background delivery from the server.')
+  }catch(err){setPushStatus('Local test failed: '+(err.message||'unknown error'))}
+  finally{setPushBusy(false)}
+ }
  async function subscribePush(){
   if(!vapidKey){setPushStatus('Background push is not configured: missing public VAPID key.');return}
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){setPushStatus('This browser does not support Web Push.');return}
@@ -77,7 +93,8 @@ function ReleaseReminder({books,userId,onSave}){
    const permission=await Notification.requestPermission()
    setEnabled(permission==='granted')
    if(permission!=='granted'){setPushStatus('Notification permission denied.');return}
-   const registration=await navigator.serviceWorker.ready
+   const registration=await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
+   if(!registration)throw new Error('Service worker is not ready; reload the app and retry.')
    let subscription=await registration.pushManager.getSubscription()
    if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodeVapidKey(vapidKey)})
    const payload=serializePushSubscription(subscription,userId)
@@ -91,7 +108,8 @@ function ReleaseReminder({books,userId,onSave}){
  async function unsubscribePush(){
   setPushBusy(true)
   try{
-   const registration=await navigator.serviceWorker.ready
+   const registration=await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
+   if(!registration)throw new Error('Service worker is not registered on this device.')
    const subscription=await registration.pushManager.getSubscription()
    if(!subscription){setDeviceRegistered(false);setPushStatus('No push subscription on this device.');return}
    const endpoint=subscription.endpoint
@@ -116,7 +134,7 @@ function ReleaseReminder({books,userId,onSave}){
   if(success){setEditing('');setDate('')}
  }
  return <section className="releaseReminder"><h3>Book release reminders</h3><p>Enter a confirmed release date for a book in your To Read list. Dates are saved to your account. On the release day, this browser can notify you when Reading Companion is open. This is not background push and release dates are not fetched automatically.</p>
-  {installHint&&<p className="statsNote">On iPhone: Safari → Share → Add to Home Screen. iOS Web Push requires the installed app and notification permission.</p>}{workerReady&&<p className="statsNote">Service worker ready. Web Push requires a configured server sender before alerts can arrive in the background.</p>}{workerReady&&<div className="pushControls"><button type="button" className="secondary" disabled={pushBusy||!vapidKey} onClick={subscribePush}>{deviceRegistered?'Refresh this device registration':'Register this device for push'}</button><button type="button" className="subtle" disabled={pushBusy} onClick={unsubscribePush}>Unsubscribe this device</button>{!vapidKey&&<p className="statsNote">Background push registration is unavailable until the public VAPID key and secure sender are configured.</p>}<p className="statsNote">Device status: {deviceRegistered?'Registered on this account':'Not registered'} · {vapidKey?'Public push key configured':'Public push key missing'}. A registered device does not guarantee server delivery.</p>{pushStatus&&<p role="status">{pushStatus}</p>}</div>}<div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
+  {installHint&&<p className="statsNote">On iPhone: Safari → Share → Add to Home Screen. iOS Web Push requires the installed app and notification permission.</p>}{workerReady&&<p className="statsNote">Service worker ready. Web Push requires a configured server sender before alerts can arrive in the background.</p>}{workerReady&&<div className="pushControls"><button type="button" className="secondary" disabled={pushBusy} onClick={testLocalNotification}>Test notification on this device</button><button type="button" className="secondary" disabled={pushBusy||!vapidKey} onClick={subscribePush}>{deviceRegistered?'Refresh this device registration':'Register this device for push'}</button><button type="button" className="subtle" disabled={pushBusy} onClick={unsubscribePush}>Unsubscribe this device</button>{!vapidKey&&<p className="statsNote">Background push registration is unavailable until the public VAPID key and secure sender are configured.</p>}<p className="statsNote">Device status: {deviceRegistered?'Registered on this account':'Not registered'} · {vapidKey?'Public push key configured':'Public push key missing'}. A registered device does not guarantee server delivery.</p>{pushStatus&&<p role="status">{pushStatus}</p>}</div>}<div className="statsHeading"><strong>{upcoming.length} upcoming · {tracked.length} tracked</strong><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Browser notifications permitted':'Allow browser notifications'}</button></div>
   <label className="checkLabel"><input type="checkbox" checked={subscribed} onChange={e=>setSubscribed(e.target.checked)}/> Show release-day notifications while this page is open</label>
   {notice&&<p role="status">{notice}</p>}
   <div className="releaseList">{upcoming.slice(0,8).map(b=><p key={b.id}><strong>{b.release_on}</strong> · {b.title} <button type="button" className="subtle" onClick={()=>{setEditing(b.id);setDate(b.release_on)}}>Edit</button></p>)}</div>
