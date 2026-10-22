@@ -483,7 +483,7 @@ function BookCatalogSearch({books,onAdd,busy}){
 }
 function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
- const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null)
+ const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null),[showLibraryTools,setShowLibraryTools]=useState(false)
  const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[readingSessions,setReadingSessions]=useState([]),[quotes,setQuotes]=useState([])
  const [sessionEdit,setSessionEdit]=useState(null),[sessionStart,setSessionStart]=useState(''),[sessionFinish,setSessionFinish]=useState(''),[quoteText,setQuoteText]=useState('')
  const [tbrSeriesSafe,setTbrSeriesSafe]=useState(false),[tbrMode,setTbrMode]=useState('all'),[tbrMaxPages,setTbrMaxPages]=useState(''),[tbrMinPages,setTbrMinPages]=useState(''),[tbrAuthor,setTbrAuthor]=useState(''),[tbrFormat,setTbrFormat]=useState('all'),[tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false),[libraryStatus,setLibraryStatus]=useState('all'),[librarySort,setLibrarySort]=useState('recent'),[nextPick,setNextPick]=useState(null)
@@ -514,6 +514,7 @@ function App(){
  }
  async function addCatalogBook(book){
   const normalize=value=>(value||'').trim().toLocaleLowerCase()
+  if(book.pages!=null&&(!Number.isInteger(book.pages)||book.pages<1||book.pages>100000)){setMessage('Page count must be a whole number between 1 and 100000.');return false}
   const duplicate=books.some(b=>(book.id&&b.catalog_source==='google_books'&&b.catalog_volume_id===book.id)||(book.isbn&&b.isbn_13===book.isbn)||(book.isbn10&&b.isbn_10===book.isbn10)||(!b.catalog_volume_id&&!b.isbn_13&&!b.isbn_10&&normalize(b.title)===normalize(book.title)&&normalize(b.author)===normalize(book.author)))
   if(duplicate){setMessage('This edition or an unverified copy of this title is already in your library.');return false}
   setBusy(true);setMessage('')
@@ -522,9 +523,10 @@ function App(){
   if(error){setMessage(error.message);return false}
   setMessage('Added '+book.title+' to your library.');await load();return true
  }
- async function add(e){e.preventDefault();if(!title.trim())return;setBusy(true);const {error}=await supabase.from('rc_books').insert({title:title.trim(),author:author.trim(),user_id:session.user.id});setBusy(false);if(error)setMessage(error.message);else{setTitle('');setAuthor('');await load()}}
+ async function add(e){e.preventDefault();if(!title.trim())return;const normalize=v=>(v||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();if(books.some(b=>normalize(b.title)===normalize(title)&&normalize(b.author)===normalize(author))&&!window.confirm('A book with the same title and author already exists. Add another edition anyway?'))return;setBusy(true);const {error}=await supabase.from('rc_books').insert({title:title.trim(),author:author.trim(),user_id:session.user.id});setBusy(false);if(error)setMessage(error.message);else{setTitle('');setAuthor('');await load()}}
  async function change(book,status){
   if(book.status===status)return
+  if((status==='to_read'||status==='dnf')&&readingSessions.some(s=>s.book_id===book.id)){setMessage('This book has completed reading sessions. Remove those sessions in the journal before changing its status to To Read or DNF.');return}
   const now=new Date();const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')
   const payload={status}
   if(status==='to_read'&&(book.started_on||book.finished_on)){
