@@ -4,6 +4,7 @@ import {supabase} from './supabase'
 import {parseStoryGraphCSV} from './storygraph'
 import {readingStatistics} from './readingStatistics'
 import {challengeVariant,challengeYears,eligibleChallengeBooks,eligibleChallengeBooksForMonth} from './challengeRules'
+import {achievements,monthlyQuests} from './gamification'
 import './style.css'
 
 const tabs=['Home','Library','Series','Journal','Challenges','Statistics']
@@ -11,6 +12,22 @@ const accent={Home:'#8364AC',Library:'#695080',Series:'#6E739F',Journal:'#B76C9D
 const formats=[['','Not selected'],['paperback','Paperback'],['hardcover','Hardcover'],['ebook','E-book'],['audiobook','Audiobook']]
 const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished','Finished'],['dnf','DNF']]
 const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function ReadingRewards({books,sessions}){
+ const [showAll,setShowAll]=useState(false)
+ const today=new Date()
+ const earned=achievements(books,sessions)
+ const quests=monthlyQuests(books,sessions,today.getFullYear(),today.getMonth()+1)
+ const unlocked=earned.filter(a=>a.unlocked).length
+ return <section className="readingRewards" aria-label="Reading achievements and monthly quests">
+  <div className="statsHeading"><h2>Achievements & Quests</h2><button type="button" className="subtle" onClick={()=>setShowAll(v=>!v)} aria-expanded={showAll}>{showAll?'Show less':'See all achievements'}</button></div>
+  <p>{unlocked} / {earned.length} achievements unlocked. Your quests reset automatically each calendar month, based on completed readings.</p>
+  <h3>{today.toLocaleDateString('en',{month:'long',year:'numeric'})} quests</h3>
+  <div className="rewardGrid">{quests.map(q=><article key={q.id}><strong>{q.completed?'✓ ':''}{q.name}</strong><p>{q.description}</p><progress max="100" value={q.progress} aria-label={q.name+' progress'}/><small>{q.value} / {q.target}{q.completed?' · Complete':''}</small></article>)}</div>
+  <h3>Achievements</h3><div className="rewardGrid">{(showAll?earned:earned.slice(0,3)).map(a=><article key={a.id}><strong>{a.unlocked?'★ ':'☆ '}{a.name}</strong><p>{a.description}</p><progress max="100" value={a.progress} aria-label={a.name+' progress'}/><small>{a.value} / {a.target}{a.unlocked?' · Unlocked':''}</small></article>)}</div>
+  <p className="statsNote">Rewards are personal milestones, not competitive scores. DNF books are excluded; unknown page counts are never estimated.</p>
+ </section>
+}
+
 function StatisticsView({books,sessions,onOpenJournal}){
  const [year,setYear]=useState(new Date().getFullYear())
  const [month,setMonth]=useState(0)
@@ -627,7 +644,7 @@ function App(){
   {!ready?<main>Loading…</main>:!session?<main className="auth"><h2>Your reading space</h2><p>Sign in to keep your books together on iPhone and Mac.</p><form onSubmit={e=>{e.preventDefault();auth('login')}}><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" minLength="6" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Sign in</button><button type="button" className="secondary" disabled={busy} onClick={()=>auth('signup')}>Create account</button></form></main>:
   <main>
    <div className="account"><span>{session.user.email}</span><div><button className="subtle" onClick={load}>↻ Sync</button><button className="subtle" onClick={()=>supabase.auth.signOut()}>Sign out</button></div></div>
-   {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
+   {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><ReadingRewards books={books} sessions={readingSessions}/><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
    tab==='Journal'?<><div className="hero"><h2>Your reading journal</h2><p>Reviews, reading dates, favorite books and quotes. DNF books are kept separate from completed reads.</p></div><div className="cards">{books.filter(b=>b.status==='finished'||b.status==='dnf'||b.status==='reading').map(b=><article key={b.id}><strong>{b.favorite?'♥ ':''}{b.title}</strong><p>{b.author||'Unknown author'} · {statuses.find(s=>s[0]===b.status)?.[1]}</p>{b.rating&&b.status==='finished'&&<p aria-label={`${b.rating} out of 5 stars`}>{'★'.repeat(b.rating)}{'☆'.repeat(5-b.rating)}</p>}{b.review&&<p>{b.review}</p>}<button className="subtle" onClick={()=>openJournal(b)}>Journal entry</button></article>)}{!books.some(b=>['finished','dnf','reading'].includes(b.status))&&<p>Start reading a book to create your first journal entry.</p>}</div></>:
    tab==='Statistics'?<StatisticsView books={books} sessions={readingSessions} onOpenJournal={openJournal}/>:
    tab==='Challenges'?<ChallengesView books={books} sessions={readingSessions} session={session}/>: 
