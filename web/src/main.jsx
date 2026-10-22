@@ -2,6 +2,7 @@ import React, {useEffect,useRef,useState} from 'react'
 import {createRoot} from 'react-dom/client'
 import {supabase} from './supabase'
 import {parseStoryGraphCSV} from './storygraph'
+import {readingStatistics} from './readingStatistics'
 import './style.css'
 
 const tabs=['Home','Library','Series','Journal','Challenges','Statistics']
@@ -11,47 +12,43 @@ const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished
 const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function StatisticsView({books,sessions,onOpenJournal}){
  const [year,setYear]=useState(new Date().getFullYear())
- const finished=books.filter(b=>b.status==='finished')
- const validDate=value=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return false;const [y,m,d]=value.split('-').map(Number);const parsed=new Date(Date.UTC(y,m-1,d));return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m-1&&parsed.getUTCDate()===d}
- const bookById=new Map(books.map(b=>[b.id,b]))
- const sessionBookIds=new Set(sessions.map(s=>s.book_id))
- const dated=[...sessions.filter(s=>bookById.get(s.book_id)?.status==='finished'&&validDate(s.finished_on)).map(s=>({...bookById.get(s.book_id),finished_on:s.finished_on,started_on:s.started_on,session_id:s.id})),...finished.filter(b=>!sessionBookIds.has(b.id)&&validDate(b.finished_on)&&(!b.started_on||b.finished_on>=b.started_on))]
- const yearly=dated.filter(b=>Number(b.finished_on.slice(0,4))===year)
- const monthly=monthNames.map((name,i)=>({name,items:yearly.filter(b=>Number(b.finished_on.slice(5,7))===i+1)}))
- const needsDates=finished.filter(b=>!sessionBookIds.has(b.id)&&(!validDate(b.finished_on)||!!(b.started_on&&(!validDate(b.started_on)||b.finished_on<b.started_on))))
- const reading=books.filter(b=>b.status==='reading')
- const dnf=books.filter(b=>b.status==='dnf')
- const formatCounts=yearly.reduce((acc,b)=>{const k=b.book_format||'unspecified';acc[k]=(acc[k]||0)+1;return acc},{})
- const authorCounts=yearly.reduce((acc,b)=>{const k=b.author?.trim()||'Unknown author';acc[k]=(acc[k]||0)+1;return acc},{})
+ const [month,setMonth]=useState(0)
+ const stats=readingStatistics(books,sessions)
+ const {finished,dated,needsReview,pages,average,countBy,forYear,forMonth}=stats
+ const yearly=forYear(year)
+ const monthly=monthNames.map((name,i)=>({name,items:forMonth(year,i+1)}))
+ const selected=month===0?yearly:monthly[month-1].items
+ const formatCounts=countBy(selected,b=>b.book_format||'unspecified')
+ const authorCounts=countBy(selected,b=>b.author?.trim()||'Unknown author')
  const topAuthors=Object.entries(authorCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,5)
- const pages=items=>items.reduce((n,b)=>n+(b.page_count||0),0)
- const rated=items=>items.filter(b=>Number.isInteger(b.rating)&&b.rating>=1&&b.rating<=5)
- const average=items=>{const r=rated(items);return r.length?(r.reduce((s,b)=>s+b.rating,0)/r.length).toFixed(1):'—'}
  const current=new Date().getFullYear()
  const years=[...new Set([current,...dated.map(b=>Number(b.finished_on.slice(0,4)))])].sort((a,b)=>b-a)
+ const maxMonth=Math.max(1,...monthly.map(m=>m.items.length))
  return <section className="stats">
-  <div className="hero"><h2>Your reading statistics</h2><p>Only finished books count. Add a finish date to include a book in monthly and yearly totals.</p></div>
-  <h2>Lifetime</h2><div className="statGrid"><article><strong>{dated.length}</strong><span>Dated completed readings</span></article>
-   <article><strong>{finished.length}</strong><span>Finished books</span></article>
-   <article><strong>{pages(finished).toLocaleString('en-US')}</strong><span>Known pages</span></article>
-   <article><strong>{average(finished)}</strong><span>Average rating</span></article>
+  <div className="hero"><h2>Your reading statistics</h2><p>Completed reading sessions are counted by finish date. DNF and undated readings are excluded from dated totals. Unknown values are never estimated.</p></div>
+  <h2>Lifetime</h2><div className="statGrid">
+   <article><strong>{stats.completedReadings}</strong><span>Dated completed readings</span></article>
+   <article><strong>{stats.uniqueFinished}</strong><span>Finished books</span></article>
+   <article><strong>{stats.rereads}</strong><span>Dated rereads</span></article>
+   <article><strong>{pages(dated).toLocaleString('en-US')}</strong><span>Known pages · dated readings</span></article>
+   <article><strong>{average(finished)}</strong><span>Average book rating</span></article>
    <article><strong>{finished.filter(b=>b.favorite).length}</strong><span>Favorites</span></article>
   </div>
-  <div className="statGrid"><article><strong>{reading.length}</strong><span>Currently reading</span></article><article><strong>{books.filter(b=>b.status==='to_read').length}</strong><span>To Read</span></article><article><strong>{dnf.length}</strong><span>DNF (excluded)</span></article></div>
-  <p className="statsNote">{finished.length-dated.length} finished {finished.length-dated.length===1?'book has':'books have'} no finish date and {finished.filter(b=>!b.page_count).length} {finished.filter(b=>!b.page_count).length===1?'book has':'books have'} no page count. Missing values are never estimated.</p>
-  <div className="statsHeading"><h2>Yearly</h2><label>Year <select value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
+  <div className="statGrid"><article><strong>{books.filter(b=>b.status==='reading').length}</strong><span>Currently reading</span></article><article><strong>{books.filter(b=>b.status==='to_read').length}</strong><span>To Read</span></article><article><strong>{books.filter(b=>b.status==='dnf').length}</strong><span>DNF (excluded)</span></article></div>
+  <p className="statsNote">{stats.missingDatedBooks} finished books without a valid dated completion; {stats.missingPages} dated readings without a known page count. Page totals sum the known full book lengths for each completed reading, including rereads.</p>
+  <div className="statsHeading"><h2>Yearly</h2><label>Year <select value={year} onChange={e=>{setYear(Number(e.target.value));setMonth(0)}}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label></div>
   <div className="statGrid">
    <article><strong>{yearly.length}</strong><span>Completed readings</span></article>
+   <article><strong>{new Set(yearly.map(b=>b.id)).size}</strong><span>Distinct books</span></article>
    <article><strong>{pages(yearly).toLocaleString('en-US')}</strong><span>Known pages</span></article>
    <article><strong>{average(yearly)}</strong><span>Average rating</span></article>
   </div>
-  <h2>Monthly · {year}</h2>
-  <div className="monthGrid">{monthly.map(m=><article key={m.name}><strong>{m.name}</strong><span>{m.items.length} {m.items.length===1?'book':'books'}</span><small>{pages(m.items).toLocaleString('en-US')} known pages</small></article>)}</div>
-  <h3>Monthly reading activity</h3><div className="statsMonthBars" role="img" aria-label={'Finished books by month in '+year}>{monthly.map(m=><div key={m.name} className="statsMonthBar"><span title={m.name+': '+m.items.length+' finished'} style={{height:(yearly.length?Math.max(3,100*m.items.length/Math.max(1,...monthly.map(x=>x.items.length))):3)+'%'}}/><small>{m.name.slice(0,3)}</small></div>)}</div>
-  <h2>Reading breakdown · {year}</h2><div className="statGrid"><article><h3>Formats</h3>{Object.entries(formatCounts).sort((a,b)=>b[1]-a[1]).map(([format,count])=><p key={format}>{formats.find(f=>f[0]===format)?.[1]||'Not specified'}: <strong>{count}</strong></p>)}{!yearly.length&&<p>No finished books.</p>}</article><article><h3>Most-read authors</h3>{topAuthors.map(([author,count])=><p key={author}>{author}: <strong>{count}</strong></p>)}{!topAuthors.length&&<p>No finished books.</p>}</article></div>
-  {needsDates.length>0&&<section className="statsReview"><h3>Books needing date review ({needsDates.length})</h3><p>These finished books cannot be placed reliably in a reading year. Open their journal entries to check dates.</p><ul>{needsDates.slice(0,20).map(b=><li key={b.id}><button type="button" className="subtle" onClick={()=>onOpenJournal(b)}>{b.title} · {b.finished_on?'Check date order':'Add finish date'}</button></li>)}</ul>{needsDates.length>20&&<p>And {needsDates.length-20} more.</p>}</section>}
-  <h2>Books finished in {year}</h2>
-  <div className="cards">{yearly.slice().sort((a,b)=>b.finished_on.localeCompare(a.finished_on)).map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.finished_on} · {b.author||'Unknown author'}</p></article>)}{!yearly.length&&<p>No dated finished books for this year.</p>}</div>
+  <h2>Monthly · {year}</h2><div className="monthGrid">{monthly.map((m,i)=><button type="button" key={m.name} className="statsMonthButton" aria-pressed={month===i+1} onClick={()=>setMonth(month===i+1?0:i+1)}><strong>{m.name}</strong><span>{m.items.length} {m.items.length===1?'reading':'readings'}</span><small>{pages(m.items).toLocaleString('en-US')} known pages</small></button>)}</div>
+  <h3>Monthly reading activity</h3><div className="statsMonthBars" role="img" aria-label={'Completed readings by month in '+year+': '+monthly.map(m=>m.name+' '+m.items.length).join(', ')}>{monthly.map(m=><div key={m.name} className="statsMonthBar"><span title={m.name+': '+m.items.length+' completed readings'} style={{height:Math.max(3,100*m.items.length/maxMonth)+'%'}}/><small>{m.name.slice(0,3)}</small></div>)}</div>
+  <h2>Reading breakdown · {month?monthNames[month-1]+' ':''}{year}</h2><div className="statGrid"><article><h3>Formats</h3>{Object.entries(formatCounts).sort((a,b)=>b[1]-a[1]).map(([format,count])=><p key={format}>{formats.find(f=>f[0]===format)?.[1]||'Not specified'}: <strong>{count}</strong></p>)}{!selected.length&&<p>No completed readings.</p>}</article><article><h3>Most-read authors</h3>{topAuthors.map(([author,count])=><p key={author}>{author}: <strong>{count}</strong></p>)}{!topAuthors.length&&<p>No completed readings.</p>}</article></div>
+  {needsReview.length>0&&<section className="statsReview"><h3>Books needing date review ({needsReview.length})</h3><p>Check the journal entries below. Invalid or missing session dates cannot be assigned to a year.</p><ul>{needsReview.slice(0,20).map(b=><li key={b.id}><button type="button" className="subtle" onClick={()=>onOpenJournal(b)}>{b.title} · Review dates</button></li>)}</ul>{needsReview.length>20&&<p>And {needsReview.length-20} more.</p>}</section>}
+  <h2>Readings completed in {month?monthNames[month-1]+' ':''}{year}</h2>
+  <div className="cards">{selected.slice().sort((a,b)=>b.finished_on.localeCompare(a.finished_on)).map(b=><article key={b.session_id||b.id}><strong>{b.title}</strong><p>{b.finished_on} · {b.author||'Unknown author'}{b.session_id?' · Reading session':''}</p><button type="button" className="subtle" onClick={()=>onOpenJournal(b)}>Open journal</button></article>)}{!selected.length&&<p>No dated completed readings for this period.</p>}</div>
  </section>
 }
 const worldCities={
