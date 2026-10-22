@@ -43,3 +43,9 @@ Version A applies to even years from 2020 and Version B to odd years. Eligibilit
 The Home view displays seven derived lifetime achievements and three monthly quests. Monthly quests renew by the local calendar month and derive their progress from saved completed readings; they require no scheduled jobs or additional database tables. DNF books are excluded, rereads count as dated completions, and missing page counts are not estimated. Five regression tests cover milestone counts, rereads, DNF exclusion and monthly rollover.
 
 **Release alerts:** The Home view can request browser notification permission, but this is only permission setup. Automated alerts about new book releases are **not implemented**: there is no verified release-date feed, backend scheduler or push subscription. The UI states this limitation explicitly and does not claim to send alerts. Browser permission alone does not provide background push notifications.
+
+### Release reminders (follow-up)
+
+The user may manually enter a verified publication date for a To Read book. Supabase stores `rc_books.release_on` and `rc_books.release_alert_enabled` under existing book RLS. When notification permission is granted, the open Web app checks due reminders on mount, data refresh and every minute, displaying a browser Notification once per book per local release day. A user-specific localStorage key prevents repeat notifications on the same browser. Removing a reminder clears both fields. Dates are not guessed or automatically imported.
+
+**Limitations:** This is an in-app/open-tab browser notification, not Web Push. It does not run with the app closed, does not sync delivery state between devices, and requires browser permission. Background delivery would need service-worker Push subscriptions, VAPID keys, a secure server-side sender and scheduled publication-date checks. Test manually in a signed-in browser with a verified date before claiming end-to-end validation.
