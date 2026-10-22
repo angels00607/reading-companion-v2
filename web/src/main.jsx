@@ -428,6 +428,7 @@ function parseStoryGraphCSV(source){
   const warnings=[]
   if(!status)warnings.push('Unrecognized reading status')
   if(dateRaw&&!finishedOn)warnings.push('Invalid finish date')
+  if(status==='finished'&&!dateRaw)warnings.push('Missing finish date (needed for yearly statistics)')
   if(ratingRaw&&rating===null)warnings.push('Rating not a whole star (1–5)')
   if(pagesRaw&&!pages)warnings.push('Invalid page count')
   return {row:index+2,title,author,status,warnings,pages,raw_pages:pagesRaw,raw_date:dateRaw,raw_rating:ratingRaw,raw_status:statusRaw,finished_on:status==='finished'?finishedOn:null,rating:status==='finished'?rating:null,isbn_13:/^\d{13}$/.test(isbn)?isbn:null,isbn_10:/^\d{9}[0-9Xx]$/.test(isbn)?isbn:null}
