@@ -549,26 +549,22 @@ function App(){
  async function importStoryGraph(items,includeDates){
   if(!session?.user?.id)return false
   setBusy(true);setMessage('')
-  let count=0,sessionCount=0
-  for(let i=0;i<items.length;i+=25){
-   const batch=items.slice(i,i+25).map(b=>({id:crypto.randomUUID(),user_id:session.user.id,title:b.title,author:b.author,status:b.status,page_count:b.pages,isbn_13:b.isbn_13,isbn_10:b.isbn_10,finished_on:includeDates?b.finished_on:null,rating:includeDates?b.rating:null}))
-   const {error}=await supabase.from('rc_books').insert(batch)
-   if(error){setMessage('Imported '+count+' books before an error: '+error.message);setBusy(false);await load();return false}
-   if(includeDates){
-    const sessions=batch.flatMap((book,index)=>(items[i+index].sessions||[]).map(s=>({book_id:book.id,user_id:session.user.id,started_on:s.started_on,finished_on:s.finished_on})))
-    if(sessions.length){
-     const {error:sessionError}=await supabase.from('rc_reading_sessions').insert(sessions)
-     if(sessionError){
-      const {error:rollbackError}=await supabase.from('rc_books').delete().in('id',batch.map(b=>b.id)).eq('user_id',session.user.id)
-      setMessage(rollbackError?'Reading sessions failed and cleanup needs attention: '+rollbackError.message:'Reading sessions failed; the current batch of books was removed. Earlier batches remain imported. '+sessionError.message)
-      setBusy(false);await load();return false
-     }
-    }
-   }
-   count+=batch.length
-   if(includeDates)sessionCount+=batch.reduce((sum,book,index)=>sum+(items[i+index].sessions||[]).length,0)
-  }
-  setBusy(false);setMessage('Imported '+count+' books and '+sessionCount+' dated reading sessions from StoryGraph.');await load();return true
+  try{
+   const payload=items.map(b=>({
+    title:b.title,author:b.author||'',status:b.status,page_count:b.pages,
+    isbn_13:b.isbn_13,isbn_10:b.isbn_10,
+    finished_on:includeDates?b.finished_on:null,rating:includeDates?b.rating:null,
+    sessions:includeDates?(b.sessions||[]):[]
+   }))
+   const {data,error}=await supabase.rpc('rc_import_storygraph',{p_books:payload})
+   if(error)throw error
+   setMessage('Import complete: '+data.books+' books and '+data.sessions+' reading sessions added; '+data.skipped+' existing books skipped. All changes were saved together.')
+   await load()
+   return true
+  }catch(err){
+   setMessage('Import cancelled without partial changes: '+(err.message||'Unknown error')+'. Check the CSV and try again.')
+   return false
+  }finally{setBusy(false)}
  }
  async function addCatalogBook(book){
   const normalize=value=>(value||'').trim().toLocaleLowerCase()
