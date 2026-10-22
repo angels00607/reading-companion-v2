@@ -540,12 +540,12 @@ function App(){
   setBusy(true);setMessage('')
   let count=0
   for(let i=0;i<items.length;i+=25){
-   const batch=items.slice(i,i+25).map(b=>({user_id:session.user.id,title:b.title,author:b.author,status:b.status,page_count:b.pages,isbn_13:b.isbn_13,isbn_10:b.isbn_10,finished_on:includeDates?b.finished_on:null,rating:includeDates?b.rating:null}))
-   const {data:created,error}=await supabase.from('rc_books').insert(batch).select('id')
+   const batch=items.slice(i,i+25).map(b=>({id:crypto.randomUUID(),user_id:session.user.id,title:b.title,author:b.author,status:b.status,page_count:b.pages,isbn_13:b.isbn_13,isbn_10:b.isbn_10,finished_on:includeDates?b.finished_on:null,rating:includeDates?b.rating:null}))
+   const {error}=await supabase.from('rc_books').insert(batch)
    if(error){setMessage('Imported '+count+' books before an error: '+error.message);setBusy(false);await load();return false}
    count+=batch.length
    if(includeDates){
-    const sessions=created.flatMap((book,index)=>(items[i+index].sessions||[]).map(s=>({book_id:book.id,user_id:session.user.id,started_on:s.started_on,finished_on:s.finished_on})))
+    const sessions=batch.flatMap((book,index)=>(items[i+index].sessions||[]).map(s=>({book_id:book.id,user_id:session.user.id,started_on:s.started_on,finished_on:s.finished_on})))
     if(sessions.length){
      const {error:sessionError}=await supabase.from('rc_reading_sessions').insert(sessions)
      if(sessionError){setMessage('Imported '+count+' books, but reading sessions could not be saved: '+sessionError.message);setBusy(false);await load();return false}
