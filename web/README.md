@@ -55,3 +55,7 @@ The user may manually enter a verified publication date for a To Read book. Supa
 The release reminder editor now offers a Google Books search using ISBN when known, or title/author otherwise. Only exact valid YYYY-MM-DD dates are offered, and the user must review the matching edition/publisher and explicitly select/save a date. Partial dates and mismatched titles are not silently converted into release days. Google Books metadata can refer to an earlier edition and is not a guaranteed upcoming-release feed. This feature requires network access to Google's Books API.
 
 **Background notifications remain unimplemented.** iOS Home Screen web push requires an installed PWA, service worker, Push API subscription and server-side scheduled delivery; this is separate from open-page browser notifications. No push is claimed to be active.
+
+### Web Push groundwork
+
+A service worker is now served at `/reading-companion-v2/sw.js` and registered under the same GitHub Pages scope. It can display a browser push event and open/focus Reading Companion when tapped. iPhone users are shown Add to Home Screen instructions when the app is not installed. **This does not create push subscriptions or deliver messages**: a VAPID public key, per-device subscriptions, RLS-protected subscription storage, scheduled server-side sender and deduplication still need to be implemented and tested. Do not expose VAPID private keys or service-role credentials in the web bundle. Browser notification permission by itself is not a Push API subscription.
