@@ -156,3 +156,9 @@
 .importCorrectionFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:.65rem;margin-top:.7rem}
 .importCorrectionFields label{display:grid;gap:.3rem;min-width:0}
 .importCorrectionFields input,.importCorrectionFields select{width:100%;min-width:0}
+
+/* Statistics month selector: accessible, touch-friendly, and responsive. */
+.stats .statsMonthButton{display:flex;flex-direction:column;align-items:flex-start;gap:.35rem;min-height:74px;text-align:left;padding:.75rem;border:1px solid var(--border,#b9aec7);border-radius:.7rem;background:transparent;color:inherit;cursor:pointer}
+.stats .statsMonthButton[aria-pressed="true"]{outline:2px solid currentColor;outline-offset:2px}
+.stats .statsMonthButton:focus-visible{outline:3px solid currentColor;outline-offset:2px}
+.stats .statsMonthButton span,.stats .statsMonthButton small{font-size:.85rem}
