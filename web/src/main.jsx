@@ -5,6 +5,7 @@ import {parseStoryGraphCSV} from './storygraph'
 import {readingStatistics} from './readingStatistics'
 import {challengeVariant,challengeYears,eligibleChallengeBooks,eligibleChallengeBooksForMonth} from './challengeRules'
 import {achievements,monthlyQuests} from './gamification'
+import {findPublicationCandidates} from './publicationLookup'
 import './style.css'
 
 const tabs=['Home','Library','Series','Journal','Challenges','Statistics']
@@ -19,6 +20,8 @@ function ReleaseReminder({books,userId,onSave}){
  const [date,setDate]=useState('')
  const [subscribed,setSubscribed]=useState(true)
  const [dayTick,setDayTick]=useState(0)
+ const [candidates,setCandidates]=useState([])
+ const [lookingUp,setLookingUp]=useState(false)
  useEffect(()=>{const timer=window.setInterval(()=>setDayTick(v=>v+1),60000);return()=>window.clearInterval(timer)},[])
  const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
  const tracked=books.filter(b=>b.release_alert_enabled&&b.release_on&&b.status==='to_read').sort((a,b)=>a.release_on.localeCompare(b.release_on))
@@ -42,6 +45,14 @@ function ReleaseReminder({books,userId,onSave}){
   if(!window.isSecureContext){setNotice('Notifications require HTTPS.');return}
   try{const result=await Notification.requestPermission();setEnabled(result==='granted');setNotice(result==='granted'?'Notifications enabled while the app is open. Background push is not configured.':'Notification permission was not granted.')}catch(err){setNotice(err.message||'Unable to request permission.')}
  }
+ async function lookup(){
+  const book=books.find(b=>b.id===editing)
+  if(!book)return
+  setLookingUp(true);setNotice('');setCandidates([])
+  try{const matches=await findPublicationCandidates(book);setCandidates(matches);if(!matches.length)setNotice('No exact publication date found. Google Books may only list a year or month; check the publisher and enter the confirmed date manually.')}
+  catch(err){setNotice(err.message||'Publication lookup unavailable.')}
+  finally{setLookingUp(false)}
+ }
  async function save(book,dateValue,active){
   const success=await onSave(book,{release_on:dateValue||null,release_alert_enabled:!!(dateValue&&active)})
   if(success){setEditing('');setDate('')}
@@ -51,8 +62,8 @@ function ReleaseReminder({books,userId,onSave}){
   <label className="checkLabel"><input type="checkbox" checked={subscribed} onChange={e=>setSubscribed(e.target.checked)}/> Show release-day notifications while this page is open</label>
   {notice&&<p role="status">{notice}</p>}
   <div className="releaseList">{upcoming.slice(0,8).map(b=><p key={b.id}><strong>{b.release_on}</strong> · {b.title} <button type="button" className="subtle" onClick={()=>{setEditing(b.id);setDate(b.release_on)}}>Edit</button></p>)}</div>
-  <label>Track a To Read book <select value={editing} onChange={e=>{setEditing(e.target.value);setDate(books.find(b=>b.id===e.target.value)?.release_on||'')}}><option value="">Choose book…</option>{books.filter(b=>b.status==='to_read').map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select></label>
-  {editing&&<div className="releaseEditor"><label>Verified publication date <input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button type="button" disabled={!date} onClick={()=>save(books.find(b=>b.id===editing),date,true)}>Save reminder</button><button type="button" className="subtle" onClick={()=>save(books.find(b=>b.id===editing),'',false)}>Remove reminder</button></div>}
+  <label>Track a To Read book <select value={editing} onChange={e=>{setEditing(e.target.value);setDate(books.find(b=>b.id===e.target.value)?.release_on||'');setCandidates([])}}><option value="">Choose book…</option>{books.filter(b=>b.status==='to_read').map(b=><option key={b.id} value={b.id}>{b.title}</option>)}</select></label>
+  {editing&&<div className="releaseEditor"><button type="button" className="subtle" disabled={lookingUp} onClick={lookup}>{lookingUp?'Searching…':'Find publication dates (Google Books)'}</button>{candidates.length>0&&<div className="releaseCandidates"><p>Check the edition and publisher before selecting. These are catalog dates, not guaranteed future release dates.</p>{candidates.slice(0,8).map(item=><div key={item.id}><button type="button" className="subtle" onClick={()=>setDate(item.date)}>{item.date} · {item.title}{item.publisher?' · '+item.publisher:''}{item.isbnMatch?' · ISBN match':''}</button>{item.link&&<a href={item.link} target="_blank" rel="noopener noreferrer">View source</a>}</div>)}</div>}<label>Verified publication date <input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button type="button" disabled={!date} onClick={()=>save(books.find(b=>b.id===editing),date,true)}>Save reminder</button><button type="button" className="subtle" onClick={()=>save(books.find(b=>b.id===editing),'',false)}>Remove reminder</button></div>}
  </section>
 }
 function ReadingRewards({books,sessions}){
