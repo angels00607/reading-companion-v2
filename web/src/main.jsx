@@ -18,6 +18,8 @@ function ReleaseReminder({books,userId,onSave}){
  const [editing,setEditing]=useState('')
  const [date,setDate]=useState('')
  const [subscribed,setSubscribed]=useState(true)
+ const [dayTick,setDayTick]=useState(0)
+ useEffect(()=>{const timer=window.setInterval(()=>setDayTick(v=>v+1),60000);return()=>window.clearInterval(timer)},[])
  const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
  const tracked=books.filter(b=>b.release_alert_enabled&&b.release_on&&b.status==='to_read').sort((a,b)=>a.release_on.localeCompare(b.release_on))
  const upcoming=tracked.filter(b=>b.release_on>=today())
@@ -34,7 +36,7 @@ function ReleaseReminder({books,userId,onSave}){
     localStorage.setItem(key,'shown')
    }catch(err){setNotice('This browser cannot display a notification: '+(err.message||'unknown error'));break}
   }
- },[books,userId,enabled,subscribed])
+ },[books,userId,enabled,subscribed,dayTick])
  async function enable(){
   if(typeof Notification==='undefined'){setNotice('This browser does not support notifications.');return}
   if(!window.isSecureContext){setNotice('Notifications require HTTPS.');return}
