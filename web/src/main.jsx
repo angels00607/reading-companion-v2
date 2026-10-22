@@ -530,7 +530,8 @@ function BookCatalogSearch({books,onAdd,busy}){
 function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
  const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null)
- const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[readingSessions,setReadingSessions]=useState([]),[quotes,setQuotes]=useState([]),[quoteText,setQuoteText]=useState('')
+ const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[readingSessions,setReadingSessions]=useState([]),[quotes,setQuotes]=useState([])
+ const [sessionEdit,setSessionEdit]=useState(null),[sessionStart,setSessionStart]=useState(''),[sessionFinish,setSessionFinish]=useState(''),[quoteText,setQuoteText]=useState('')
  const [tbrSeriesSafe,setTbrSeriesSafe]=useState(false),[tbrMode,setTbrMode]=useState('all'),[tbrMaxPages,setTbrMaxPages]=useState(''),[tbrMinPages,setTbrMinPages]=useState(''),[tbrAuthor,setTbrAuthor]=useState(''),[tbrFormat,setTbrFormat]=useState('all'),[tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false),[libraryStatus,setLibraryStatus]=useState('all'),[librarySort,setLibrarySort]=useState('recent'),[nextPick,setNextPick]=useState(null)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[])
  async function load(){if(!session)return;const {data:sessionRows,error:sessionError}=await supabase.from('rc_reading_sessions').select('id,book_id,started_on,finished_on').order('finished_on',{ascending:false});if(sessionError)setMessage(sessionError.message);else setReadingSessions(sessionRows||[]);const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite,series_name,series_number,series_volume_kind,catalog_source,catalog_volume_id,isbn_13,isbn_10').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
@@ -611,8 +612,29 @@ function App(){
   else{setEditing(null);setDraft(null)}
   await load()
  }
- function openJournal(book){setJournalBook(book.id);setJournalDraft({...book});setQuoteText('');loadQuotes(book.id)}
+ function openJournal(book){setJournalBook(book.id);setJournalDraft({...book});setQuoteText('');setSessionEdit(null);setSessionStart('');setSessionFinish('');loadQuotes(book.id)}
  async function loadQuotes(bookId){const {data,error}=await supabase.from('rc_quotes').select('id,quote,created_at').eq('book_id',bookId).order('created_at',{ascending:false});if(error)setMessage(error.message);else setQuotes(data)}
+ async function saveReadingSession(e){
+  e.preventDefault()
+  if(!sessionFinish){setMessage('A finish date is required for a completed reading.');return}
+  if(sessionStart&&sessionStart>sessionFinish){setMessage('Finish date cannot be before start date.');return}
+  if(!journalDraft||journalDraft.status!=='finished'){setMessage('Only finished books can have completed reading sessions.');return}
+  setBusy(true)
+  const payload={started_on:sessionStart||null,finished_on:sessionFinish}
+  const request=sessionEdit?supabase.from('rc_reading_sessions').update(payload).eq('id',sessionEdit).eq('book_id',journalBook).eq('user_id',session.user.id):supabase.from('rc_reading_sessions').insert({...payload,book_id:journalBook,user_id:session.user.id})
+  const {error}=await request
+  if(error)setMessage(error.message)
+  else{setSessionEdit(null);setSessionStart('');setSessionFinish('');await load()}
+  setBusy(false)
+ }
+ async function deleteReadingSession(id){
+  if(!window.confirm('Delete this reading session? The book will remain in your library.'))return
+  setBusy(true)
+  const {error}=await supabase.from('rc_reading_sessions').delete().eq('id',id).eq('book_id',journalBook).eq('user_id',session.user.id)
+  if(error)setMessage(error.message)
+  else{if(sessionEdit===id){setSessionEdit(null);setSessionStart('');setSessionFinish('')}await load()}
+  setBusy(false)
+ }
  async function saveJournal(e){
   e.preventDefault()
   if(journalDraft.started_on&&journalDraft.finished_on&&journalDraft.finished_on<journalDraft.started_on){setMessage('Finish date cannot be before start date.');return}
@@ -661,7 +683,7 @@ function App(){
     <label>Review<textarea rows="4" value={journalDraft.review||''} onChange={e=>setJournalDraft({...journalDraft,review:e.target.value})}/></label>
     <label className="checkLabel"><input type="checkbox" checked={!!journalDraft.favorite} onChange={e=>setJournalDraft({...journalDraft,favorite:e.target.checked})}/> Favorite</label>
     <div className="editorActions"><button type="button" className="secondary" onClick={()=>{setJournalBook(null);setJournalDraft(null)}}>Close</button><button disabled={busy}>Save journal</button></div>
-   </form><hr/><h3>Reading sessions</h3><p>Each completed reading is stored separately. Missing dates are not estimated.</p><ul>{readingSessions.filter(s=>s.book_id===journalBook).map(s=><li key={s.id}>{s.started_on||'Start unknown'} → {s.finished_on||'Finish unknown'}</li>)}</ul>{!readingSessions.some(s=>s.book_id===journalBook)&&<p>No separate reading sessions recorded yet.</p>}<hr/><h3>Quotes</h3><form onSubmit={addQuote}><textarea rows="3" placeholder="Save a favorite quote…" value={quoteText} onChange={e=>setQuoteText(e.target.value)}/><button disabled={busy||!quoteText.trim()}>Add quote</button></form><div className="quotes">{quotes.map(q=><blockquote key={q.id}>{q.quote}<button className="subtle" onClick={()=>deleteQuote(q.id)}>Delete</button></blockquote>)}</div></section></div>}
+   </form><hr/><h3>Reading sessions</h3><p>Each completed reading is stored separately. Missing dates are not estimated.</p><ul>{readingSessions.filter(s=>s.book_id===journalBook).map(s=><li key={s.id}>{s.started_on||'Start unknown'} → {s.finished_on||'Finish unknown'} <button type="button" className="subtle" disabled={busy} onClick={()=>{setSessionEdit(s.id);setSessionStart(s.started_on||'');setSessionFinish(s.finished_on||'')}}>Edit session</button> <button type="button" className="subtle" disabled={busy} onClick={()=>deleteReadingSession(s.id)}>Delete session</button></li>)}</ul>{!readingSessions.some(s=>s.book_id===journalBook)&&<p>No separate reading sessions recorded yet.</p>}{journalDraft.status==='finished'&&<form onSubmit={saveReadingSession}><h4>{sessionEdit?'Edit reading session':'Add completed reading'}</h4><label>Started on (optional)<input type="date" value={sessionStart} onChange={e=>setSessionStart(e.target.value)}/></label><label>Finished on<input type="date" required value={sessionFinish} onChange={e=>setSessionFinish(e.target.value)}/></label><button disabled={busy}>{sessionEdit?'Save session':'Add session'}</button>{sessionEdit&&<button type="button" className="subtle" onClick={()=>{setSessionEdit(null);setSessionStart('');setSessionFinish('')}}>Cancel edit</button>}</form>}<hr/><h3>Quotes</h3><form onSubmit={addQuote}><textarea rows="3" placeholder="Save a favorite quote…" value={quoteText} onChange={e=>setQuoteText(e.target.value)}/><button disabled={busy||!quoteText.trim()}>Add quote</button></form><div className="quotes">{quotes.map(q=><blockquote key={q.id}>{q.quote}<button className="subtle" onClick={()=>deleteQuote(q.id)}>Delete</button></blockquote>)}</div></section></div>}
    {editing&&draft&&<div className="modalBackdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-label="Edit book"><h2>Edit book</h2><form onSubmit={saveBook}>
      <label>Title<input value={draft.title} required onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
      <label>Author<input value={draft.author} onChange={e=>setDraft({...draft,author:e.target.value})}/></label>
