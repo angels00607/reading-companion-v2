@@ -600,7 +600,7 @@ function App(){
   if(journalDraft.started_on&&journalDraft.finished_on&&journalDraft.finished_on<journalDraft.started_on){setMessage('Finish date cannot be before start date.');return}
   if(journalDraft.rating!==null&&journalDraft.rating!==''&&journalDraft.status!=='finished'){setMessage('Ratings are for finished books only.');return}
   if(journalDraft.status==='finished'&&!journalDraft.finished_on){setMessage('Finished books need a finish date for yearly statistics and challenges.');return}
-  if(journalDraft.finished_on&&journalDraft.finished_on>new Date().toLocaleDateString('en-CA')){setMessage('Finish date cannot be in the future.');return}
+  if(journalDraft.finished_on&&journalDraft.finished_on>(()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')})()){setMessage('Finish date cannot be in the future.');return}
   if(journalDraft.status==='to_read'&&(journalDraft.started_on||journalDraft.finished_on)){setMessage('To Read books cannot have reading dates. Change the status first, or clear the dates.');return}
   if(journalDraft.status==='finished'&&readingSessions.some(s=>s.book_id===journalDraft.id)&&journalDraft.finished_on!==readingSessions.filter(s=>s.book_id===journalDraft.id&&s.finished_on).map(s=>s.finished_on).sort().at(-1)){setMessage('The finish date must match the latest completed reading session. Edit the session dates below first.');return}
   const payload={started_on:journalDraft.started_on||null,finished_on:journalDraft.finished_on||null,rating:journalDraft.status==='finished'?(journalDraft.rating===''?null:journalDraft.rating):null,review:journalDraft.review||'',favorite:!!journalDraft.favorite}
