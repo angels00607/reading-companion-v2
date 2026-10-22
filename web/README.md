@@ -59,3 +59,9 @@ The release reminder editor now offers a Google Books search using ISBN when kno
 ### Web Push groundwork
 
 A service worker is now served at `/reading-companion-v2/sw.js` and registered under the same GitHub Pages scope. It can display a browser push event and open/focus Reading Companion when tapped. iPhone users are shown Add to Home Screen instructions when the app is not installed. **This does not create push subscriptions or deliver messages**: a VAPID public key, per-device subscriptions, RLS-protected subscription storage, scheduled server-side sender and deduplication still need to be implemented and tested. Do not expose VAPID private keys or service-role credentials in the web bundle. Browser notification permission by itself is not a Push API subscription.
+
+### Secure push subscription groundwork
+
+The database now has `public.rc_push_subscriptions` (user-owned endpoint and subscription keys) with RLS and four owner-scoped policies. The Home screen includes explicit per-device subscribe/unsubscribe actions. Subscription is disabled until `VITE_VAPID_PUBLIC_KEY` is configured for the Web build. The public key may be in the client; the **private VAPID key must never be committed or exposed**. Device records are stored only after explicit permission, and unsubscribe removes the database record and browser subscription. Existing app-open reminders remain available independently.
+
+**Not production-ready yet:** A server-side push sender, VAPID private key in secure server secrets, an authenticated scheduled trigger, date/timezone handling, delivery logs, invalid-endpoint cleanup and end-to-end iPhone testing are still required. Merely saving a subscription does not send notifications. No server sender or scheduler has been enabled.
