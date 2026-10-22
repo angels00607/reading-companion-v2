@@ -29,3 +29,11 @@ The parser regression tests run in GitHub Actions before deployment. They use sy
 - StoryGraph may not provide dates for every reread; those sessions must be completed manually.
 - Apple SwiftUI project is a separate early prototype. The supported personal experience is the Web/PWA app.
 - GitHub Actions checks compilation and parser tests; manual end-to-end testing of the authenticated import is still needed before importing a real library.
+
+## Reading challenges (Phase 4)
+
+Seven challenge views: Alphabet (26 letters), Around the World (20 verified cities), Tropes (20 prompts), Archetypes (20 positions), Monthly (36 prompts), Seasonal (20 prompts) and Reading Roulette (10 mechanisms).
+
+Version A applies to even years from 2020 and Version B to odd years. Eligibility uses dated completed reading sessions when available, so a reread may count in its actual completion year. DNF and currently-reading books do not qualify. Monthly and seasonal challenges use the actual session completion month. Challenge matches (city, trope, archetype, prompt) require the reader's confirmation; the app does not infer them.
+
+**Known content gap:** Archetypes B position 10 is intentionally empty, and positions 12–20 require the user's original prompt wording. They are not auto-generated. Automated challenge rules tests run before Web deployment. End-to-end assignment/removal tests with an authenticated account remain necessary before calling the challenge workflow fully verified.
