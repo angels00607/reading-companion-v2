@@ -548,14 +548,18 @@ function App(){
    const batch=items.slice(i,i+25).map(b=>({id:crypto.randomUUID(),user_id:session.user.id,title:b.title,author:b.author,status:b.status,page_count:b.pages,isbn_13:b.isbn_13,isbn_10:b.isbn_10,finished_on:includeDates?b.finished_on:null,rating:includeDates?b.rating:null}))
    const {error}=await supabase.from('rc_books').insert(batch)
    if(error){setMessage('Imported '+count+' books before an error: '+error.message);setBusy(false);await load();return false}
-   count+=batch.length
    if(includeDates){
     const sessions=batch.flatMap((book,index)=>(items[i+index].sessions||[]).map(s=>({book_id:book.id,user_id:session.user.id,started_on:s.started_on,finished_on:s.finished_on})))
     if(sessions.length){
      const {error:sessionError}=await supabase.from('rc_reading_sessions').insert(sessions)
-     if(sessionError){setMessage('Imported '+count+' books, but reading sessions could not be saved: '+sessionError.message);setBusy(false);await load();return false}
+     if(sessionError){
+      const {error:rollbackError}=await supabase.from('rc_books').delete().in('id',batch.map(b=>b.id)).eq('user_id',session.user.id)
+      setMessage(rollbackError?'Reading sessions failed and cleanup needs attention: '+rollbackError.message:'Reading sessions failed; the current batch of books was removed. Earlier batches remain imported. '+sessionError.message)
+      setBusy(false);await load();return false
+     }
     }
    }
+   count+=batch.length
   }
   setBusy(false);setMessage('Imported '+count+' books from StoryGraph with '+(includeDates?'available dated reading sessions':'no reading dates')+'.');await load();return true
  }
