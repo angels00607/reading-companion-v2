@@ -12,6 +12,17 @@ const accent={Home:'#8364AC',Library:'#695080',Series:'#6E739F',Journal:'#B76C9D
 const formats=[['','Not selected'],['paperback','Paperback'],['hardcover','Hardcover'],['ebook','E-book'],['audiobook','Audiobook']]
 const statuses=[['to_read','To Read'],['reading','Currently Reading'],['finished','Finished'],['dnf','DNF']]
 const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function ReleaseReminder({books}){
+ const [enabled,setEnabled]=useState(false)
+ const [notice,setNotice]=useState('')
+ useEffect(()=>{setEnabled(typeof Notification!=='undefined'&&Notification.permission==='granted')},[])
+ async function enable(){
+  if(typeof Notification==='undefined'){setNotice('This browser does not support notifications.');return}
+  if(!window.isSecureContext){setNotice('Notifications require HTTPS.');return}
+  try{const result=await Notification.requestPermission();setEnabled(result==='granted');setNotice(result==='granted'?'Permission granted. Release tracking requires a verified publication source and scheduled checks, which are not configured yet.':'Permission was not granted.')}catch(err){setNotice(err.message||'Unable to request notification permission.')}
+ }
+ return <section className="releaseReminder"><h3>New release alerts</h3><p>Automatic publication-date tracking is not connected yet. No release dates or notifications are invented.</p><p>{books.filter(b=>b.status==='to_read').length} books on your To Read list.</p><button type="button" className="secondary" onClick={enable} disabled={enabled}>{enabled?'Notifications permitted':'Allow browser notifications'}</button>{notice&&<p role="status">{notice}</p>}</section>
+}
 function ReadingRewards({books,sessions}){
  const [showAll,setShowAll]=useState(false)
  const today=new Date()
@@ -644,7 +655,7 @@ function App(){
   {!ready?<main>Loading…</main>:!session?<main className="auth"><h2>Your reading space</h2><p>Sign in to keep your books together on iPhone and Mac.</p><form onSubmit={e=>{e.preventDefault();auth('login')}}><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" minLength="6" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Sign in</button><button type="button" className="secondary" disabled={busy} onClick={()=>auth('signup')}>Create account</button></form></main>:
   <main>
    <div className="account"><span>{session.user.email}</span><div><button className="subtle" onClick={load}>↻ Sync</button><button className="subtle" onClick={()=>supabase.auth.signOut()}>Sign out</button></div></div>
-   {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><ReadingRewards books={books} sessions={readingSessions}/><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
+   {tab==='Home'?<><div className="hero"><small>YOUR READING SPACE</small><h2>Your next chapter starts here</h2><p>{books.filter(b=>b.status==='reading').length} currently reading · {books.length} books in your library</p></div><ReadingRewards books={books} sessions={readingSessions}/><ReleaseReminder books={books}/><h2>Currently Reading</h2><div className="cards">{books.filter(b=>b.status==='reading').map(b=><article key={b.id}><strong>{b.title}</strong><p>{b.author}</p><p>{b.progress_mode==='page'&&b.page_count?`${b.current_page} / ${b.page_count} pages`:`${b.progress_percent}%`}</p><button className="subtle" onClick={()=>openEditor(b)}>Update progress</button></article>)}{!books.some(b=>b.status==='reading')&&<p>No books in progress yet.</p>}</div></>:
    tab==='Journal'?<><div className="hero"><h2>Your reading journal</h2><p>Reviews, reading dates, favorite books and quotes. DNF books are kept separate from completed reads.</p></div><div className="cards">{books.filter(b=>b.status==='finished'||b.status==='dnf'||b.status==='reading').map(b=><article key={b.id}><strong>{b.favorite?'♥ ':''}{b.title}</strong><p>{b.author||'Unknown author'} · {statuses.find(s=>s[0]===b.status)?.[1]}</p>{b.rating&&b.status==='finished'&&<p aria-label={`${b.rating} out of 5 stars`}>{'★'.repeat(b.rating)}{'☆'.repeat(5-b.rating)}</p>}{b.review&&<p>{b.review}</p>}<button className="subtle" onClick={()=>openJournal(b)}>Journal entry</button></article>)}{!books.some(b=>['finished','dnf','reading'].includes(b.status))&&<p>Start reading a book to create your first journal entry.</p>}</div></>:
    tab==='Statistics'?<StatisticsView books={books} sessions={readingSessions} onOpenJournal={openJournal}/>:
    tab==='Challenges'?<ChallengesView books={books} sessions={readingSessions} session={session}/>: 
