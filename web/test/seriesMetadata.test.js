@@ -12,3 +12,9 @@ test('recognizes French tome notation with explicit series',()=>{
  assert.equal(extractSeriesMetadata('Le Dragon, tome 2').series_position,null)
  assert.equal(extractSeriesMetadata('Le Dragon (Tome 2)').series_position,null)
 })
+
+test('parses explicit series hash notation without guessing unrelated numbers',()=>{
+ assert.deepEqual(extractSeriesMetadata('The Dragon (Dragon Saga #2)'),{series:'Dragon Saga',series_position:2,confidence:'explicit_title'})
+ assert.equal(extractSeriesMetadata('The Dragon #2').series_position,null)
+ assert.equal(extractSeriesMetadata('The Dragon (2026)').series_position,null)
+})
