@@ -11,6 +11,8 @@ create table if not exists public.rc_not_interested (
  created_at timestamptz not null default now(),
  constraint rc_not_interested_title_nonempty check (length(trim(title)) > 0)
 );
+create unique index if not exists rc_not_interested_user_title_author
+ on public.rc_not_interested (user_id, lower(trim(title)), lower(trim(author)));
 create unique index if not exists rc_not_interested_user_isbn13
  on public.rc_not_interested (user_id, isbn_13) where isbn_13 is not null;
 create unique index if not exists rc_not_interested_user_isbn10
