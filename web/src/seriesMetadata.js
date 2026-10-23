@@ -3,7 +3,8 @@ export function extractSeriesMetadata(title){
  const value=String(title||'').trim()
  const patterns=[
   /^(.*?)\s*\(([^()]+?)\s*[,#]\s*(?:book|volume|vol\.?|tome)\s*#?([1-9]\d*(?:\.\d+)?)\)$/i,
-  /^(.*?)\s*[-–:]\s*([^:()]+?)\s*[,#]\s*(?:book|volume|vol\.?|tome)\s*#?([1-9]\d*(?:\.\d+)?)$/i
+  /^(.*?)\s*[-–:]\s*([^:()]+?)\s*[,#]\s*(?:book|volume|vol\.?|tome)\s*#?([1-9]\d*(?:\.\d+)?)$/i,
+  /^(.*?)\s*\(([^()]+?)\s*[-–]\s*(?:book|volume|vol\.?|tome)\s*#?([1-9]\d*(?:\.\d+)?)\)$/i
  ]
  for(const pattern of patterns){
   const match=value.match(pattern)
