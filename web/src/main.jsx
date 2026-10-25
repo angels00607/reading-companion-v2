@@ -556,16 +556,19 @@ function NotInterestedArchive({userId,archiveVersion}){
 function StoryGraphImport({books,onImport,onArchiveExcluded,busy}){
  const [items,setItems]=useState([]),[error,setError]=useState(''),[name,setName]=useState(''),[includeDates,setIncludeDates]=useState(true),[confirmImport,setConfirmImport]=useState(false),[importMode,setImportMode]=useState('history'),[archiveMessage,setArchiveMessage]=useState('')
  const key=x=>[x.title,x.author].map(v=>(v||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase()).join('|')
- const hasId=x=>!!(x.isbn_13||x.isbn_10)
  const seen=[]
  const excludedUnread=items.filter(x=>x.status==='dnf')
  const selectedItems=importMode==='tbr'?items.filter(x=>x.status==='to_read'):items.filter(x=>x.status!=='dnf')
- const preview=selectedItems.map(x=>{
+ // Classify known reading statuses before blank-status rows so an earlier
+ // unclassified edition cannot suppress a later verified reading record.
+ const prioritized=[...selectedItems].sort((a,b)=>Number(!!b.status)-Number(!!a.status))
+ const classified=prioritized.map(x=>{
   const matches=b=>(x.isbn_13&&b.isbn_13===x.isbn_13)||(x.isbn_10&&b.isbn_10===x.isbn_10)||key(b)===key(x)
   const duplicate=books.some(matches)||seen.some(matches)
   if(!duplicate)seen.push(x)
   return {...x,duplicate:!!duplicate}
  })
+ const preview=classified.sort((a,b)=>a.row-b.row)
  const ambiguousDuplicates=preview.filter(x=>x.duplicate&&x.status===null)
  const eligible=preview.filter(x=>!x.duplicate&&x.status&&x.warnings.length===0)
  const needsReview=preview.filter(x=>!x.duplicate&&(!x.status||x.warnings.length>0))
