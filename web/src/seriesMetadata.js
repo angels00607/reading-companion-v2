@@ -14,3 +14,17 @@ export function extractSeriesMetadata(title){
  }
  return {series:'',series_position:null,confidence:'unknown'}
 }
+
+/**
+ * Accept a series/volume suggestion only when the source supplies explicit
+ * bibliographic series metadata. Never infer order from a book title or year.
+ * Returns a candidate for user review, not a silently saved assignment.
+ */
+export function verifiedSeriesCandidate(record){
+ const name=typeof record?.series==='string'?record.series.trim():''
+ const position=typeof record?.series_position==='number'?record.series_position:NaN
+ const source=typeof record?.source==='string'?record.source.trim():''
+ const url=typeof record?.source_url==='string'?record.source_url.trim():''
+ if(!name||!Number.isFinite(position)||position<=0||!source||!/^https:\/\//i.test(url))return null
+ return {series:name,series_position:position,source,source_url:url,requires_confirmation:true}
+}
