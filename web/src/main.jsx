@@ -560,22 +560,32 @@ function NotInterestedArchive({userId,archiveVersion}){
  return <section className="storygraphImport"><h2>Not Interested</h2><p>Excluded books are separate from your reading history and TBR.</p><button type="button" onClick={refresh}>Refresh archive</button>{error&&<p role="alert">{error}</p>}<p>{rows.length} archived books</p><input aria-label="Search excluded books" placeholder="Search archived books" value={query} onChange={event=>setQuery(event.target.value)}/><nav aria-label="Not Interested alphabetical index" className="archiveAlphabet">{alphabet.map(letter=>{const count=groups.find(g=>g.letter===letter)?.books.length||0;return <button type="button" key={letter} className="secondary" disabled={!count} aria-expanded={query.trim()?true:openLetters.includes(letter)} onClick={()=>toggle(letter)}>{letter} <small>({count})</small></button>})}</nav>{groups.length===0&&<p>No matching books.</p>}{groups.map(group=>{const expanded=!!query.trim()||openLetters.includes(group.letter);return <div key={group.letter} className="archiveLetter"><button type="button" className="secondary" aria-expanded={expanded} onClick={()=>toggle(group.letter)}>{group.letter==='#'?'# (numbers and symbols)':group.letter} — {group.books.length} books {expanded?'▾':'▸'}</button>{expanded&&<ul>{group.books.map(book=><li key={book.id}>{book.title} — {book.author}</li>)}</ul>}</div>})}</section>
 }
 function PageCountEnrichment({books,onUpdated}){
- const [results,setResults]=useState([]),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[notice,setNotice]=useState('')
- const candidates=books.filter(b=>b.status==='finished'&&!(Number(b.page_count)>0)&&/^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(String(b.isbn_13||b.isbn_10||'').replace(/[-\\s]/g,'')))
+ const [results,setResults]=useState([]),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[notice,setNotice]=useState(''),[offset,setOffset]=useState(0),[progress,setProgress]=useState('')
+ const candidates=books.filter(b=>b.status==='finished'&&!(Number(b.page_count)>0)&&/^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(String(b.isbn_13||b.isbn_10||'').replace(/[^0-9X]/gi,'')))
  async function lookup(){
+  if(loading)return
   setLoading(true);setResults([]);setNotice('')
-  const found=[]
-  for(const book of candidates.slice(0,10)){
-   const isbn=String(book.isbn_13||book.isbn_10).replace(/[-\\s]/g,'')
+  const start=offset>=candidates.length?0:offset
+  const batch=candidates.slice(start,start+10)
+  setProgress('Checking '+batch.length+' editions…')
+  const found=await Promise.all(batch.map(async book=>{
+   const isbn=String(book.isbn_13||book.isbn_10).replace(/[^0-9X]/gi,'')
+   const controller=new AbortController()
+   const timeout=setTimeout(()=>controller.abort(),6500)
    try{
-    const response=await fetch('https://openlibrary.org/isbn/'+encodeURIComponent(isbn)+'.json')
-    if(!response.ok)continue
+    const response=await fetch('https://openlibrary.org/isbn/'+encodeURIComponent(isbn)+'.json',{signal:controller.signal})
+    if(!response.ok)return null
     const edition=await response.json()
     const pages=Number(edition.number_of_pages)
-    if(Number.isInteger(pages)&&pages>0&&pages<10000)found.push({id:book.id,title:book.title,author:book.author,pages,isbn,updated_at:book.updated_at,selected:true})
-   }catch{}
-  }
-  setResults(found);setNotice(found.length?'Review the edition-specific page counts before saving.':'No verified edition page counts found in this batch.');setLoading(false)
+    return Number.isInteger(pages)&&pages>0&&pages<10000?{id:book.id,title:book.title,author:book.author,pages,isbn,updated_at:book.updated_at,selected:true}:null
+   }catch{return null}finally{clearTimeout(timeout)}
+  }))
+  const matches=found.filter(Boolean)
+  setResults(matches)
+  setOffset(start+batch.length>=candidates.length?0:start+batch.length)
+  setNotice(matches.length?'Review the edition-specific page counts before saving.':'No verified page counts found in this batch. Try the next batch; Open Library may not have these editions.')
+  setProgress('Checked '+batch.length+' editions; '+matches.length+' matches.')
+  setLoading(false)
  }
  async function save(){
   setSaving(true);let saved=0,failed=0
@@ -585,7 +595,7 @@ function PageCountEnrichment({books,onUpdated}){
   }
   setResults([]);setNotice(saved+' page counts saved; '+failed+' skipped or changed on another device.');setSaving(false);await onUpdated()
  }
- return <section className="panel"><h2>Fill missing page counts</h2><p>Look up up to 10 finished books by exact ISBN and edition in Open Library. Preview results before saving. Existing page counts are never overwritten.</p><p>{candidates.length} finished books with missing pages and an ISBN are eligible.</p><button type="button" disabled={loading||saving||!candidates.length} onClick={lookup}>{loading?'Looking up editions…':'Find page counts (next 10)'}</button>{results.length>0&&<div><ul>{results.map((item,index)=><li key={item.id}><label><input type="checkbox" checked={item.selected} onChange={e=>setResults(prev=>prev.map((x,i)=>i===index?{...x,selected:e.target.checked}:x))}/>{item.title} — {item.author}: {item.pages} pages (ISBN {item.isbn})</label></li>)}</ul><button type="button" disabled={saving||!results.some(x=>x.selected)} onClick={save}>{saving?'Saving…':'Save selected page counts'}</button></div>}{notice&&<p role="status">{notice}</p>}</section>
+ return <section className="panel"><h2>Fill missing page counts</h2><p>Look up up to 10 finished books by exact ISBN and edition in Open Library. Preview results before saving. Existing page counts are never overwritten.</p><p>{candidates.length} finished books with missing pages and an ISBN are eligible.</p><button type="button" disabled={loading||saving||!candidates.length} onClick={lookup}>{loading?'Looking up editions…':'Find page counts (next 10)'}</button>{progress&&<p role="status">{progress}</p>}{results.length>0&&<div><ul>{results.map((item,index)=><li key={item.id}><label><input type="checkbox" checked={item.selected} onChange={e=>setResults(prev=>prev.map((x,i)=>i===index?{...x,selected:e.target.checked}:x))}/>{item.title} — {item.author}: {item.pages} pages (ISBN {item.isbn})</label></li>)}</ul><button type="button" disabled={saving||!results.some(x=>x.selected)} onClick={save}>{saving?'Saving…':'Save selected page counts'}</button></div>}{notice&&<p role="status">{notice}</p>}</section>
 }
 function StoryGraphImport({books,onImport,onArchiveExcluded,busy}){
  const [items,setItems]=useState([]),[error,setError]=useState(''),[name,setName]=useState(''),[includeDates,setIncludeDates]=useState(true),[confirmImport,setConfirmImport]=useState(false),[importMode,setImportMode]=useState('history'),[archiveMessage,setArchiveMessage]=useState('')
