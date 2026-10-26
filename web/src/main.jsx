@@ -543,6 +543,7 @@ function NotInterestedArchive({userId,archiveVersion}){
  const [rows,setRows]=useState([])
  const [error,setError]=useState('')
  const [query,setQuery]=useState('')
+ const [openLetters,setOpenLetters]=useState([])
  async function refresh(){
   if(!userId)return
   const result=await supabase.from('rc_not_interested').select('id,title,author').eq('user_id',userId).order('title').limit(1000)
@@ -550,8 +551,12 @@ function NotInterestedArchive({userId,archiveVersion}){
   else{setRows(result.data||[]);setError('')}
  }
  useEffect(()=>{refresh()},[userId,archiveVersion])
- const filtered=rows.filter(book=>(book.title+' '+book.author).toLowerCase().includes(query.toLowerCase()))
- return <section className="storygraphImport"><h2>Not Interested</h2><p>Excluded books are separate from your reading history and TBR.</p><button type="button" onClick={refresh}>Refresh archive</button>{error&&<p role="alert">{error}</p>}<p>{rows.length} archived books</p><input aria-label="Search excluded books" placeholder="Search archived books" value={query} onChange={event=>setQuery(event.target.value)}/><ul>{filtered.map(book=><li key={book.id}>{book.title} — {book.author}</li>)}</ul></section>
+ const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+ const letterOf=title=>{const first=(title||'').trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').charAt(0).toUpperCase();return alphabet.includes(first)?first:'#'}
+ const filtered=rows.filter(book=>(book.title+' '+book.author).toLowerCase().includes(query.trim().toLowerCase()))
+ const groups=['#',...alphabet].map(letter=>({letter,books:filtered.filter(book=>letterOf(book.title)===letter)})).filter(group=>group.books.length)
+ const toggle=letter=>setOpenLetters(prev=>prev.includes(letter)?prev.filter(x=>x!==letter):[...prev,letter])
+ return <section className="storygraphImport"><h2>Not Interested</h2><p>Excluded books are separate from your reading history and TBR.</p><button type="button" onClick={refresh}>Refresh archive</button>{error&&<p role="alert">{error}</p>}<p>{rows.length} archived books</p><input aria-label="Search excluded books" placeholder="Search archived books" value={query} onChange={event=>setQuery(event.target.value)}/><nav aria-label="Not Interested alphabetical index" className="archiveAlphabet">{alphabet.map(letter=>{const count=groups.find(g=>g.letter===letter)?.books.length||0;return <button type="button" key={letter} className="secondary" disabled={!count} aria-expanded={query.trim()?true:openLetters.includes(letter)} onClick={()=>toggle(letter)}>{letter} <small>({count})</small></button>})}</nav>{groups.length===0&&<p>No matching books.</p>}{groups.map(group=>{const expanded=!!query.trim()||openLetters.includes(group.letter);return <div key={group.letter} className="archiveLetter"><button type="button" className="secondary" aria-expanded={expanded} onClick={()=>toggle(group.letter)}>{group.letter==='#'?'# (numbers and symbols)':group.letter} — {group.books.length} books {expanded?'▾':'▸'}</button>{expanded&&<ul>{group.books.map(book=><li key={book.id}>{book.title} — {book.author}</li>)}</ul>}</div>})}</section>
 }
 function PageCountEnrichment({books,onUpdated}){
  const [results,setResults]=useState([]),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[notice,setNotice]=useState('')
