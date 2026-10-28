@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'v3/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 permissions:
@@ -34,6 +35,20 @@ jobs:
           VITE_SUPABASE_URL: https://skenuigulnonrshkwelu.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_fch6NSx050hyF61mInrQPQ_hzlWW1-_
         run: npm run build
+      - name: Preserve existing V2 output
+        run: mv web/dist web/dist-v2
+      - name: Build isolated V3 from the same source
+        working-directory: web
+        env:
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+          VITE_SUPABASE_URL: https://qpkliwzcfhyyifmvuygh.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_LrCG-sz30gDrAlPX_txa5g_pAM7HsLM
+        run: npm run build -- --base=/reading-companion-v2/v3/
+      - name: Combine V2 and V3 without overwriting V2
+        run: |
+          mv web/dist web/dist-v3
+          mv web/dist-v2 web/dist
+          mv web/dist-v3 web/dist/v3
       - name: Prepare GitHub Pages output
         run: |
           touch web/dist/.nojekyll
