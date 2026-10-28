@@ -768,12 +768,13 @@ function App(){
  const [session,setSession]=useState(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[message,setMessage]=useState('')
  const [archiveVersion,setArchiveVersion]=useState(0)
  const [editing,setEditing]=useState(null),[draft,setDraft]=useState(null),[showLibraryTools,setShowLibraryTools]=useState(false)
+ const [summaryBusy,setSummaryBusy]=useState(false)
  const [journalBook,setJournalBook]=useState(null),[journalDraft,setJournalDraft]=useState(null),[readingSessions,setReadingSessions]=useState([]),[quotes,setQuotes]=useState([])
  const [finishBook,setFinishBook]=useState(null),[finishDate,setFinishDate]=useState(''),[finishRating,setFinishRating]=useState(''),[finishQuotes,setFinishQuotes]=useState([''])
  const [sessionEdit,setSessionEdit]=useState(null),[sessionStart,setSessionStart]=useState(''),[sessionFinish,setSessionFinish]=useState(''),[quoteText,setQuoteText]=useState('')
  const [tbrSeriesSafe,setTbrSeriesSafe]=useState(false),[tbrMode,setTbrMode]=useState('all'),[tbrMaxPages,setTbrMaxPages]=useState(''),[tbrMinPages,setTbrMinPages]=useState(''),[tbrAuthor,setTbrAuthor]=useState(''),[tbrFormat,setTbrFormat]=useState('all'),[tab,setTab]=useState('Home'),[books,setBooks]=useState([]),[title,setTitle]=useState(''),[author,setAuthor]=useState(''),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[dark,setDark]=useState(false),[libraryStatus,setLibraryStatus]=useState('all'),[librarySort,setLibrarySort]=useState('recent'),[nextPick,setNextPick]=useState(null)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[])
- async function load(){if(!session)return;const {data:sessionRows,error:sessionError}=await supabase.from('rc_reading_sessions').select('id,book_id,started_on,finished_on').order('finished_on',{ascending:false});if(sessionError)setMessage(sessionError.message);else setReadingSessions(sessionRows||[]);const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,favorite,series_name,series_number,series_volume_kind,catalog_source,catalog_volume_id,isbn_13,isbn_10,release_on,release_alert_enabled').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
+ async function load(){if(!session)return;const {data:sessionRows,error:sessionError}=await supabase.from('rc_reading_sessions').select('id,book_id,started_on,finished_on').order('finished_on',{ascending:false});if(sessionError)setMessage(sessionError.message);else setReadingSessions(sessionRows||[]);const {data,error}=await supabase.from('rc_books').select('id,title,author,status,updated_at,page_count,current_page,progress_percent,progress_mode,book_format,started_on,finished_on,rating,review,summary_status,summary_draft,favorite,series_name,series_number,series_volume_kind,catalog_source,catalog_volume_id,isbn_13,isbn_10,release_on,release_alert_enabled').order('created_at',{ascending:false});if(error)setMessage(error.message);else setBooks(data)}
  useEffect(()=>{if(session)load();else{setBooks([]);setReadingSessions([])}},[session?.user?.id])
  useEffect(()=>{const onFocus=()=>{if(session)load()};const onVisible=()=>{if(document.visibilityState==='visible'&&session)load()};window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onVisible);return()=>{window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible)}},[session])
  async function auth(mode){setBusy(true);setMessage('');const {error}=mode==='login'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password});setBusy(false);setMessage(error?error.message:mode==='signup'?'Account created. Check your email if confirmation is required.':'')}
@@ -908,6 +909,30 @@ function App(){
   else{setEditing(null);setDraft(null)}
   await load()
  }
+ async function generateSummary(){
+  if(!journalDraft||summaryBusy)return
+  setSummaryBusy(true);setMessage('')
+  try{
+   const {data,error}=await supabase.functions.invoke('rc-generate-summary',{body:{bookId:journalDraft.id}})
+   if(error)throw error
+   if(!data?.summary)throw Error(data?.error||'Summary generation unavailable.')
+   const {data:updated,error:saveError}=await supabase.from('rc_books').update({summary_draft:data.summary,summary_status:'pending'}).eq('id',journalDraft.id).eq('updated_at',journalDraft.updated_at).select('id,updated_at')
+   if(saveError)throw saveError
+   if(!updated?.length)throw Error('Book changed on another device. Sync and reopen.')
+   setJournalDraft(old=>({...old,summary_draft:data.summary,summary_status:'pending',updated_at:updated[0].updated_at}))
+   await load()
+  }catch(err){setMessage('Summary generation unavailable: '+(err.message||'Unknown error'))}
+  finally{setSummaryBusy(false)}
+ }
+ async function approveSummary(){
+  if(!journalDraft?.summary_draft?.trim())return
+  setBusy(true)
+  const {data,error}=await supabase.from('rc_books').update({review:journalDraft.summary_draft.trim(),summary_status:'approved'}).eq('id',journalDraft.id).eq('updated_at',journalDraft.updated_at).select('id')
+  setBusy(false)
+  if(error)setMessage(error.message)
+  else if(!data?.length)setMessage('Book changed on another device. Sync and reopen.')
+  else{setMessage('Summary approved.');await load();setJournalDraft(old=>({...old,review:old.summary_draft,summary_status:'approved'}))}
+ }
  function openJournal(book){setJournalBook(book.id);setJournalDraft({...book});setQuoteText('');setSessionEdit(null);setSessionStart('');setSessionFinish('');loadQuotes(book.id)}
  async function loadQuotes(bookId){const {data,error}=await supabase.from('rc_quotes').select('id,quote,created_at').eq('book_id',bookId).order('created_at',{ascending:false});if(error)setMessage(error.message);else setQuotes(data)}
  async function saveReadingSession(e){
@@ -989,7 +1014,7 @@ function App(){
     <label>Started on<input type="date" value={journalDraft.started_on||''} onChange={e=>setJournalDraft({...journalDraft,started_on:e.target.value})}/></label>
     <label>Finished on<input type="date" value={journalDraft.finished_on||''} onChange={e=>setJournalDraft({...journalDraft,finished_on:e.target.value})}/></label>
     {journalDraft.status==='finished'&&<label>Rating (half stars)<select value={journalDraft.rating??''} onChange={e=>setJournalDraft({...journalDraft,rating:e.target.value===''?null:Number(e.target.value)})}><option value="">Not rated</option>{Array.from({length:10},(_,i)=>(i+1)/2).map(n=><option key={n} value={n}>{n} / 5</option>)}</select></label>}
-    <label>Review<textarea rows="4" value={journalDraft.review||''} onChange={e=>setJournalDraft({...journalDraft,review:e.target.value})}/></label>
+    <section className="summaryReview"><h3>Book Summary · English · max 45 words</h3><p>Status: {journalDraft.summary_status==='approved'?'Approved':journalDraft.summary_status==='pending'?'Pending your approval':'Not generated'}</p><p>Generation only runs when you request it. You can edit the draft before approving.</p><button type="button" className="secondary" disabled={busy||summaryBusy} onClick={generateSummary}>{summaryBusy?'Generating…':journalDraft.summary_status==='pending'?'Regenerate Summary':'Generate Summary'}</button>{journalDraft.summary_status==='pending'&&<><label>Draft summary<textarea rows="4" value={journalDraft.summary_draft||''} onChange={e=>setJournalDraft({...journalDraft,summary_draft:e.target.value})}/></label><button type="button" disabled={busy||summaryBusy||!journalDraft.summary_draft?.trim()||journalDraft.summary_draft.trim().split(/\s+/).length>45} onClick={approveSummary}>Approve Summary</button></>}{journalDraft.summary_status==='approved'&&<p>{journalDraft.review}</p>}</section>
     <label className="checkLabel"><input type="checkbox" checked={!!journalDraft.favorite} onChange={e=>setJournalDraft({...journalDraft,favorite:e.target.checked})}/> Favorite</label>
     <div className="editorActions"><button type="button" className="secondary" onClick={()=>{setJournalBook(null);setJournalDraft(null)}}>Close</button><button disabled={busy}>Save journal</button></div>
    </form><hr/><h3>Reading sessions</h3><p>Each completed reading is stored separately. Missing dates are not estimated. When sessions exist, the book finish date must match the most recent completed session.</p><ul>{readingSessions.filter(s=>s.book_id===journalBook).map(s=><li key={s.id}>{s.started_on||'Start unknown'} → {s.finished_on||'Finish unknown'} <button type="button" className="subtle" disabled={busy} onClick={()=>{setSessionEdit(s.id);setSessionStart(s.started_on||'');setSessionFinish(s.finished_on||'')}}>Edit session</button> <button type="button" className="subtle" disabled={busy} onClick={()=>deleteReadingSession(s.id)}>Delete session</button></li>)}</ul>{!readingSessions.some(s=>s.book_id===journalBook)&&<p>No separate reading sessions recorded yet.</p>}{journalDraft.status==='finished'&&<form onSubmit={saveReadingSession}><h4>{sessionEdit?'Edit reading session':'Add completed reading'}</h4><label>Started on (optional)<input type="date" value={sessionStart} onChange={e=>setSessionStart(e.target.value)}/></label><label>Finished on<input type="date" required value={sessionFinish} onChange={e=>setSessionFinish(e.target.value)}/></label><button disabled={busy}>{sessionEdit?'Save session':'Add session'}</button>{sessionEdit&&<button type="button" className="subtle" onClick={()=>{setSessionEdit(null);setSessionStart('');setSessionFinish('')}}>Cancel edit</button>}</form>}<hr/><h3>Quotes</h3><form onSubmit={addQuote}><textarea rows="3" placeholder="Save a favorite quote…" value={quoteText} onChange={e=>setQuoteText(e.target.value)}/><button disabled={busy||!quoteText.trim()}>Add quote</button></form><div className="quotes">{quotes.map(q=><blockquote key={q.id}>{q.quote}<button className="subtle" onClick={()=>deleteQuote(q.id)}>Delete</button></blockquote>)}</div></section></div>}
